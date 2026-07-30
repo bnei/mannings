@@ -159,23 +159,34 @@ Known-good reference values:
 | Inputs | Expected |
 |---|---|
 | `b=3, z=2, n=0.025, S=0.001, y=1.0` | `Q = 4.8385`, `A = 5`, `P = 7.4721`, `R = 0.66915`, `V = 0.96771`, `Fr = 0.36563` |
-| `b=2, z=2, n=0.03, S=0.002, Q=5` | `y = 1.073169`, `A = 4.4497`, `P = 6.7994`, `R = 0.65443`, `V = 1.12367`, `Fr = 0.42671` |
-| ↳ same channel, `H = 1.5` | capacity `10.1207`, freeboard `0.4268` |
-| Triangular `b=0, z=2, y=1, n=0.03, S=0.002` | `Q = 1.7435` |
-| Rectangular `b=2, z=0, y=1, n=0.03, S=0.002` | `Q = 1.8782` |
+| `b=2, z=2, n=0.03, S=0.01, Q=5` | `y = 0.718346`, `A = 2.4687`, `P = 5.2125`, `R = 0.47361`, `V = 2.0253`, `Fr = 0.90868` |
+| ↳ same channel, `H = 1.5` | capacity `22.631`, freeboard `0.78165` |
+| Triangular `b=0, z=2, y=1, n=0.03, S=0.01` | `Q = 3.8987` |
+| Rectangular `b=2, z=0, y=1, n=0.03, S=0.01` | `Q = 4.1997` |
 
-Sweep reference values, same channel (`b=2, z=2, H=1.5, n=0.03, S=0.002`):
+That second row is the page as it loads — the input defaults are exactly that channel, so
+it can be checked without typing anything. Note `Fr = 0.9087` is a fast subcritical flow,
+close to but outside the near-critical band; a change to the defaults that pushes it past
+`0.95` would put the landing state into the unreliable-results warning.
+
+Sweep reference values, same channel (`b=2, z=2, H=1.5, n=0.03, S=0.01`):
 
 | Sweep | Expected |
 |---|---|
-| depth mode, `Q` = 1 | `y = 0.4706924058` |
-| depth mode, `Q` = 10 | `y = 1.4916624794` |
-| depth mode, `n` = 0.01 (`Q`=5) | `y = 0.6170807542` |
-| depth mode, `S₀` = 0.01 (`Q`=5) | `y = 0.7183463649` |
-| depth mode, `b` = 0 (`Q`=5) | `y = 1.4844859793` |
-| flow mode, `y` = 0.75 | `Q = 2.4330525968` |
-| flow mode, `z` = 3 with `b` = 0, `y` = 1 | `Q = 2.7200434230` |
-| flow mode, `b` = 3 with `z` = 0, `y` = 1 | `Q = 3.1813820870` |
+| depth mode, `Q` = 1 | `y = 0.3024374329` |
+| depth mode, `Q` = 10 | `y = 1.0163579858` |
+| depth mode, `Q` = 22 | `y = 1.4804252636` |
+| depth mode, `n` = 0.01 (`Q`=5) | `y = 0.4013178935` |
+| depth mode, `S₀` = 0.05 (`Q`=5) | `y = 0.4706924058` |
+| depth mode, `b` = 0 (`Q`=5) | `y = 1.0977898835` |
+| flow mode, `y` = 0.75 | `Q = 5.4404709993` |
+| flow mode, `z` = 3 with `b` = 0, `y` = 1 | `Q = 6.0822019956` |
+| flow mode, `b` = 3 with `z` = 0, `y` = 1 | `Q = 7.1137866090` |
+
+The `Q = 22` row is there to keep a sample just under the bank now that the steeper bed puts
+`Q = 10` well below it — the near-overtopping path needs a reference value too. The `S₀` row
+is swept to 0.05 rather than 0.01 because 0.01 is now the operating point itself, which would
+make it a check against the point row rather than against the sweep.
 
 Round-trip check: `normalDepth(discharge(y))` recovers `y = 1.234` to nine decimals.
 
