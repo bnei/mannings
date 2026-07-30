@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Manning's equation — trapezoidal channel</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <meta name="description" content="Solve Manning's equation for a trapezoidal channel: normal depth from discharge, or discharge from depth. SI units. Runs entirely in your browser.">
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #fbfbf9;
+        --fg: #1c1c1a;
+        --muted: #5f5f58;
+        --line: #dedcd4;
+        --card: #ffffff;
+        --accent: #1f5f99;
+        --warn: #8a5a00;
+        --warn-bg: #fdf6e6;
+        --err: #a12d2d;
+        --err-bg: #fceeee;
+        --water: #6ba7d4;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #14161a;
+          --fg: #e8e8e4;
+          --muted: #9a9a92;
+          --line: #2a2e35;
+          --card: #1b1e23;
+          --accent: #79b6e3;
+          --warn: #e0b464;
+          --warn-bg: #2a2317;
+          --err: #e58f8f;
+          --err-bg: #2a1a1a;
+          --water: #3f6d94;
+        }
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        padding: 3rem 1.5rem 4rem;
+        background: var(--bg);
+        color: var(--fg);
+        font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      main { max-width: 58rem; margin: 0 auto; }
+
+      header { margin-bottom: 2.5rem; }
+
+      h1 {
+        margin: 0 0 0.6rem;
+        font-size: clamp(1.6rem, 4vw, 2.1rem);
+        letter-spacing: -0.02em;
+        font-weight: 620;
+      }
+
+      .tagline {
+        margin: 0;
+        max-width: 36rem;
+        color: var(--muted);
+        font-size: 1rem;
+      }
+
+      .cols {
+        display: grid;
+        gap: 1.25rem;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      }
+
+      @media (max-width: 46rem) {
+        .cols { grid-template-columns: 1fr; }
+      }
+
+      .card {
+        padding: 1.4rem 1.5rem 1.5rem;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--card);
+      }
+
+      .hidden { display: none; }
+
+      h2 {
+        margin: 0 0 1.1rem;
+        font-size: 0.78rem;
+        font-weight: 600;
+        letter-spacing: 0.11em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .modes {
+        display: flex;
+        gap: 0.5rem;
+        margin-bottom: 1.35rem;
+      }
+
+      .modes label {
+        flex: 1;
+        padding: 0.5rem 0.6rem;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        font-size: 0.86rem;
+        text-align: center;
+        cursor: pointer;
+        transition: border-color 0.15s ease, color 0.15s ease;
+      }
+
+      .modes input { position: absolute; opacity: 0; pointer-events: none; }
+
+      .modes label:has(input:checked) {
+        border-color: var(--accent);
+        color: var(--accent);
+        font-weight: 560;
+      }
+
+      .modes label:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+      .field {
+        display: grid;
+        grid-template-columns: 1fr 7.5rem;
+        align-items: center;
+        gap: 0.5rem 0.9rem;
+        margin-bottom: 0.7rem;
+      }
+
+      .field.hidden { display: none; }
+
+      .field label { font-size: 0.93rem; }
+
+      .field .sub {
+        display: block;
+        color: var(--muted);
+        font-size: 0.79rem;
+        line-height: 1.35;
+      }
+
+      .field input {
+        width: 100%;
+        padding: 0.42rem 0.55rem;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--bg);
+        color: var(--fg);
+        font: inherit;
+        font-size: 0.95rem;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .field input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+      figure { margin: 1.5rem 0 0; }
+
+      svg { display: block; width: 100%; height: auto; }
+
+      figcaption {
+        margin-top: 0.5rem;
+        color: var(--muted);
+        font-size: 0.79rem;
+        text-align: center;
+      }
+
+      .primary {
+        margin-bottom: 1.35rem;
+        padding-bottom: 1.2rem;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .primary .label {
+        display: block;
+        color: var(--muted);
+        font-size: 0.78rem;
+        font-weight: 600;
+        letter-spacing: 0.11em;
+        text-transform: uppercase;
+      }
+
+      .primary .value {
+        font-size: clamp(1.7rem, 5vw, 2.3rem);
+        font-weight: 620;
+        letter-spacing: -0.02em;
+        font-variant-numeric: tabular-nums;
+        color: var(--accent);
+      }
+
+      .primary .unit { font-size: 0.55em; font-weight: 500; color: var(--muted); }
+
+      dl {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 0.42rem 1rem;
+        margin: 0;
+        font-size: 0.93rem;
+      }
+
+      dt { color: var(--muted); }
+
+      dd {
+        margin: 0;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+
+      dd .unit { color: var(--muted); font-size: 0.85em; }
+
+      .note {
+        margin: 1.2rem 0 0;
+        padding: 0.7rem 0.85rem;
+        border-radius: 7px;
+        font-size: 0.87rem;
+        line-height: 1.5;
+      }
+
+      .note.warn { background: var(--warn-bg); color: var(--warn); }
+      .note.err  { background: var(--err-bg);  color: var(--err); }
+      .note.hidden { display: none; }
+
+      footer {
+        margin-top: 3rem;
+        padding-top: 1.4rem;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 0.88rem;
+      }
+
+      footer p { margin: 0 0 0.6rem; }
+      footer a { color: inherit; }
+
+      code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.92em;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Manning's equation — trapezoidal channel</h1>
+        <p class="tagline">
+          Solve for normal depth from a discharge, or discharge from a depth. Symmetric
+          trapezoidal section, SI units. Everything runs in your browser — no data leaves
+          this page.
+        </p>
+      </header>
+
+      <div class="cols">
+        <section class="card">
+          <h2>Inputs</h2>
+
+          <div class="modes" role="radiogroup" aria-label="Solve for">
+            <label>
+              <input type="radio" name="mode" value="depth" checked>
+              Solve for depth
+            </label>
+            <label>
+              <input type="radio" name="mode" value="flow">
+              Solve for discharge
+            </label>
+          </div>
+
+          <div class="field" id="row-Q">
+            <label for="in-Q">
+              Discharge, <em>Q</em>
+              <span class="sub">m³/s</span>
+            </label>
+            <input type="number" id="in-Q" value="5" step="any" min="0" inputmode="decimal">
+          </div>
+
+          <div class="field hidden" id="row-y">
+            <label for="in-y">
+              Flow depth, <em>y</em>
+              <span class="sub">m</span>
+            </label>
+            <input type="number" id="in-y" value="0.8" step="any" min="0" inputmode="decimal">
+          </div>
+
+          <div class="field">
+            <label for="in-b">
+              Bottom width, <em>b</em>
+              <span class="sub">m — use 0 for a triangular channel</span>
+            </label>
+            <input type="number" id="in-b" value="2" step="any" min="0" inputmode="decimal">
+          </div>
+
+          <div class="field">
+            <label for="in-z">
+              Side slope, <em>z</em>
+              <span class="sub">horizontal : vertical — z = 2 means 2 m out per 1 m up. Use 0 for vertical walls</span>
+            </label>
+            <input type="number" id="in-z" value="2" step="any" min="0" inputmode="decimal">
+          </div>
+
+          <div class="field">
+            <label for="in-H">
+              Channel height, <em>H</em>
+              <span class="sub">m — depth of the channel itself, top of bank to invert</span>
+            </label>
+            <input type="number" id="in-H" value="1.5" step="any" min="0" inputmode="decimal">
+          </div>
+
+          <div class="field">
+            <label for="in-n">
+              Manning's <em>n</em>
+              <span class="sub">s/m^(1/3)</span>
+            </label>
+            <input type="number" id="in-n" value="0.03" step="any" min="0" inputmode="decimal">
+          </div>
+
+          <div class="field">
+            <label for="in-S">
+              Bed slope, <em>S₀</em>
+              <span class="sub">m/m</span>
+            </label>
+            <input type="number" id="in-S" value="0.002" step="any" min="0" inputmode="decimal">
+          </div>
+
+          <figure>
+            <div id="diagram" aria-hidden="true"></div>
+            <figcaption id="diagram-caption"></figcaption>
+          </figure>
+        </section>
+
+        <section class="card">
+          <h2>Results</h2>
+
+          <div id="error" class="note err hidden"></div>
+
+          <div id="results">
+            <div class="primary">
+              <span class="label" id="primary-label"></span>
+              <span class="value"><span id="primary-value"></span><span class="unit" id="primary-unit"></span></span>
+            </div>
+
+            <dl>
+              <dt>Flow area, <em>A</em></dt>
+              <dd><span id="out-A"></span> <span class="unit">m²</span></dd>
+
+              <dt>Wetted perimeter, <em>P</em></dt>
+              <dd><span id="out-P"></span> <span class="unit">m</span></dd>
+
+              <dt>Hydraulic radius, <em>R</em></dt>
+              <dd><span id="out-R"></span> <span class="unit">m</span></dd>
+
+              <dt>Top width, <em>T</em></dt>
+              <dd><span id="out-T"></span> <span class="unit">m</span></dd>
+
+              <dt>Mean velocity, <em>V</em></dt>
+              <dd><span id="out-V"></span> <span class="unit">m/s</span></dd>
+
+              <dt>Froude number, <em>Fr</em></dt>
+              <dd><span id="out-Fr"></span></dd>
+
+              <dt>Flow regime</dt>
+              <dd><span id="out-regime"></span></dd>
+
+              <dt>Capacity at <em>H</em></dt>
+              <dd><span id="out-Qfull"></span> <span class="unit">m³/s</span></dd>
+
+              <dt id="dt-free">Freeboard</dt>
+              <dd><span id="out-free"></span> <span class="unit">m</span></dd>
+            </dl>
+
+            <div id="warn" class="note warn hidden"></div>
+          </div>
+        </section>
+      </div>
+
+      <footer>
+        <p>
+          Uniform steady flow, <code>Q = (1/n)·A·R^(2/3)·√S₀</code> with SI units
+          (<code>k = 1.0</code>). Normal depth is found by bisection on a strictly
+          increasing <code>Q(y)</code>, so the root is unique.
+        </p>
+        <p>
+          Results assume the channel is prismatic and the flow uniform. Near-critical flow,
+          backwater effects and non-uniform sections are outside what this calculates.
+          <a href="https://briannei.com/">briannei.com</a>
+        </p>
+      </footer>
+    </main>
+
+    <script>
+      "use strict";
+
+      // ---- Pure hydraulics. No DOM access below this line until the UI section. ----
+
+      var G = 9.80665;      // m/s^2
+      var Y_MAX = 1e6;      // m, bracketing guard so a pathological input can't spin forever
+
+      // Symmetric trapezoid: bottom width b, side slope z (H:V), flow depth y. All metres.
+      function section(b, z, y) {
+        var A = y * (b + z * y);
+        var P = b + 2 * y * Math.sqrt(1 + z * z);
+        var T = b + 2 * z * y;
+        return {
+          A: A,
+          P: P,
+          T: T,
+          R: P > 0 ? A / P : 0,
+          D: T > 0 ? A / T : 0   // hydraulic depth, used for Froude
+        };
+      }
+
+      // Manning's equation, SI (k = 1.0).
+      function discharge(b, z, y, n, S) {
+        if (y <= 0) return 0;
+        var s = section(b, z, y);
+        if (s.A <= 0 || s.R <= 0) return 0;
+        return (1 / n) * s.A * Math.pow(s.R, 2 / 3) * Math.sqrt(S);
+      }
+
+      // Normal depth for a target discharge. Q(y) is strictly increasing for a trapezoid
+      // (both A and R grow with y), so a sign change brackets a unique root and bisection
+      // cannot diverge. Chosen over Newton deliberately: no derivative, no failure mode,
+      // and the iteration cost is irrelevant here.
+      function normalDepth(b, z, Q, n, S) {
+        var hi = 1;
+        while (hi < Y_MAX && discharge(b, z, hi, n, S) < Q) hi *= 2;
+        if (discharge(b, z, hi, n, S) < Q) return null;   // beyond any plausible geometry
+
+        var lo = 0;
+        for (var i = 0; i < 200; i++) {
+          var mid = (lo + hi) / 2;
+          if (discharge(b, z, mid, n, S) < Q) lo = mid; else hi = mid;
+          if (hi - lo <= 1e-12 * Math.max(1, hi)) break;
+        }
+        return (lo + hi) / 2;
+      }
+
+      // Froude number and regime. The band around unity is reported as near-critical
+      // rather than pinned to Fr = 1.000 — uniform-flow assumptions are unreliable there
+      // and claiming exact criticality would be false precision.
+      function froude(V, D) {
+        return D > 0 ? V / Math.sqrt(G * D) : Infinity;
+      }
+
+      function regime(Fr) {
+        if (!isFinite(Fr)) return "—";
+        if (Fr > 0.95 && Fr < 1.05) return "Near critical";
+        return Fr < 1 ? "Subcritical" : "Supercritical";
+      }
+
+      // 4 significant figures, no exponent inside the range anyone builds channels in.
+      function fmt(v) {
+        if (v === null || v === undefined || !isFinite(v)) return "—";
+        if (v === 0) return "0";
+        var a = Math.abs(v);
+        if (a >= 1e6 || a < 1e-4) return v.toExponential(3);
+        return String(Number(v.toPrecision(4)));
+      }
+
+      // Returns an array of human-readable problems, empty if the inputs are usable.
+      function validate(v, mode) {
+        var e = [];
+        var required = ["b", "z", "H", "n", "S"].concat(mode === "depth" ? ["Q"] : ["y"]);
+        for (var i = 0; i < required.length; i++) {
+          if (!isFinite(v[required[i]])) return ["Fill in every field to see results."];
+        }
+        if (v.n <= 0) e.push("Manning's n must be greater than zero.");
+        if (v.S <= 0) e.push("Bed slope must be greater than zero — Manning's equation is undefined for a flat or adverse bed, where normal depth would be infinite.");
+        if (v.b < 0) e.push("Bottom width cannot be negative.");
+        if (v.z < 0) e.push("Side slope cannot be negative.");
+        if (v.b === 0 && v.z === 0) e.push("A channel needs either a bottom width or a side slope — both zero leaves no cross-section.");
+        if (v.H <= 0) e.push("Channel height must be greater than zero.");
+        if (mode === "depth" && v.Q <= 0) e.push("Discharge must be greater than zero.");
+        if (mode === "flow" && v.y <= 0) e.push("Flow depth must be greater than zero.");
+        return e;
+      }
+
+      // ---- Cross-section drawing ----
+
+      function drawSection(b, z, H, y) {
+        var W = 440, HP = 250, pad = 32;
+        var yTop = Math.max(H, y);
+        var worldW = b + 2 * z * yTop;
+        var worldH = yTop;
+        if (!(worldW > 0) || !(worldH > 0)) return "";
+
+        var s = Math.min((W - 2 * pad) / worldW, (HP - 2 * pad) / worldH);
+        var cx = W / 2, base = HP - pad;
+        function X(xw) { return (cx + xw * s).toFixed(1); }
+        function Y(yw) { return (base - yw * s).toFixed(1); }
+
+        function pts(depth) {
+          return [
+            [-(b / 2) - z * depth, depth],
+            [-(b / 2), 0],
+            [b / 2, 0],
+            [(b / 2) + z * depth, depth]
+          ].map(function (p) { return X(p[0]) + "," + Y(p[1]); }).join(" ");
+        }
+
+        var over = y > H;
+        var parts = [];
+
+        // Water first so the channel outline draws on top of it.
+        if (y > 0) {
+          parts.push('<polygon points="' + pts(y) + '" fill="var(--water)" fill-opacity="0.55"/>');
+          parts.push('<line x1="' + X(-(b / 2) - z * y) + '" y1="' + Y(y) +
+                     '" x2="' + X((b / 2) + z * y) + '" y2="' + Y(y) +
+                     '" stroke="var(--water)" stroke-width="2"/>');
+        }
+
+        // Channel walls, drawn to H.
+        parts.push('<polyline points="' + pts(H) + '" fill="none" stroke="var(--fg)" ' +
+                   'stroke-width="2" stroke-linejoin="round"/>');
+
+        // Mark the top of bank only when the water surface is somewhere else, so the
+        // overtopping case reads unambiguously instead of being clipped away.
+        if (Math.abs(y - H) > 1e-9) {
+          parts.push('<line x1="' + X(-(b / 2) - z * H) + '" y1="' + Y(H) +
+                     '" x2="' + X((b / 2) + z * H) + '" y2="' + Y(H) +
+                     '" stroke="' + (over ? "var(--err)" : "var(--line)") +
+                     '" stroke-width="1" stroke-dasharray="4 3"/>');
+        }
+
+        parts.push('<text x="' + X(0) + '" y="' + (base + 17) +
+                   '" fill="var(--muted)" font-size="11" text-anchor="middle">b = ' +
+                   fmt(b) + ' m</text>');
+
+        if (y > 0) {
+          parts.push('<text x="' + X((b / 2) + z * y + 0.04 * worldW) + '" y="' + Y(y) +
+                     '" fill="' + (over ? "var(--err)" : "var(--muted)") +
+                     '" font-size="11" dominant-baseline="middle">y = ' + fmt(y) + ' m</text>');
+        }
+
+        return '<svg viewBox="0 0 ' + W + ' ' + HP + '" role="img" ' +
+               'aria-label="Trapezoidal channel cross-section">' + parts.join("") + '</svg>';
+      }
+
+      // ---- UI ----
+
+      var KEYS = ["Q", "y", "b", "z", "H", "n", "S"];
+      var inputs = {};
+      KEYS.forEach(function (k) { inputs[k] = document.getElementById("in-" + k); });
+
+      var modeRadios = Array.prototype.slice.call(document.querySelectorAll('input[name="mode"]'));
+      var el = {
+        rowQ: document.getElementById("row-Q"),
+        rowY: document.getElementById("row-y"),
+        error: document.getElementById("error"),
+        results: document.getElementById("results"),
+        warn: document.getElementById("warn"),
+        primaryLabel: document.getElementById("primary-label"),
+        primaryValue: document.getElementById("primary-value"),
+        primaryUnit: document.getElementById("primary-unit"),
+        diagram: document.getElementById("diagram"),
+        caption: document.getElementById("diagram-caption"),
+        dtFree: document.getElementById("dt-free"),
+        out: {}
+      };
+      ["A", "P", "R", "T", "V", "Fr", "regime", "Qfull", "free"].forEach(function (k) {
+        el.out[k] = document.getElementById("out-" + k);
+      });
+
+      function currentMode() {
+        for (var i = 0; i < modeRadios.length; i++) {
+          if (modeRadios[i].checked) return modeRadios[i].value;
+        }
+        return "depth";
+      }
+
+      function readInputs() {
+        var v = {};
+        KEYS.forEach(function (k) { v[k] = parseFloat(inputs[k].value); });
+        return v;
+      }
+
+      function showError(messages) {
+        el.error.innerHTML = messages.join("<br>");
+        el.error.classList.remove("hidden");
+        el.results.classList.add("hidden");
+        el.warn.classList.add("hidden");   // don't leave a stale warning under an error
+      }
+
+      function compute() {
+        var mode = currentMode();
+        el.rowQ.classList.toggle("hidden", mode !== "depth");
+        el.rowY.classList.toggle("hidden", mode !== "flow");
+
+        var v = readInputs();
+        var problems = validate(v, mode);
+        if (problems.length) {
+          showError(problems);
+          el.diagram.innerHTML = "";
+          el.caption.textContent = "";
+          return;
+        }
+
+        el.error.classList.add("hidden");
+        el.results.classList.remove("hidden");
+
+        var y, Q;
+        if (mode === "depth") {
+          Q = v.Q;
+          y = normalDepth(v.b, v.z, Q, v.n, v.S);
+          if (y === null) {
+            showError(["No normal depth exists for that discharge in this channel — check the slope, roughness and geometry."]);
+            return;
+          }
+        } else {
+          y = v.y;
+          Q = discharge(v.b, v.z, y, v.n, v.S);
+        }
+
+        var s = section(v.b, v.z, y);
+        var V = s.A > 0 ? Q / s.A : 0;
+        var Fr = froude(V, s.D);
+        var Qfull = discharge(v.b, v.z, v.H, v.n, v.S);
+        var freeboard = v.H - y;
+
+        if (mode === "depth") {
+          el.primaryLabel.textContent = "Normal depth";
+          el.primaryValue.textContent = fmt(y);
+          el.primaryUnit.textContent = " m";
+        } else {
+          el.primaryLabel.textContent = "Discharge";
+          el.primaryValue.textContent = fmt(Q);
+          el.primaryUnit.textContent = " m³/s";
+        }
+
+        el.out.A.textContent = fmt(s.A);
+        el.out.P.textContent = fmt(s.P);
+        el.out.R.textContent = fmt(s.R);
+        el.out.T.textContent = fmt(s.T);
+        el.out.V.textContent = fmt(V);
+        el.out.Fr.textContent = fmt(Fr);
+        el.out.regime.textContent = regime(Fr);
+        el.out.Qfull.textContent = fmt(Qfull);
+        el.out.free.textContent = fmt(Math.abs(freeboard));
+        el.dtFree.textContent = freeboard < 0 ? "Depth above bank" : "Freeboard";
+
+        var notes = [];
+        if (freeboard < 0) {
+          notes.push("<strong>Channel overtops.</strong> The water surface sits " +
+                     fmt(-freeboard) + " m above the top of bank, so the section cannot " +
+                     "carry this flow — results describe an unconfined trapezoid, not the real channel.");
+        }
+        if (Fr > 0.95 && Fr < 1.05) {
+          notes.push("<strong>Near critical.</strong> Uniform-flow calculations are " +
+                     "unreliable within a few percent of Fr = 1; the depth here is sensitive " +
+                     "to small changes in slope or roughness.");
+        }
+        if (notes.length) {
+          el.warn.innerHTML = notes.join("<br><br>");
+          el.warn.classList.remove("hidden");
+        } else {
+          el.warn.classList.add("hidden");
+        }
+
+        el.diagram.innerHTML = drawSection(v.b, v.z, v.H, y);
+        el.caption.textContent = "Section drawn to scale. Dashed line is the top of bank.";
+
+        writeHash(v, mode);
+      }
+
+      // Inputs live in the URL fragment so a configuration is bookmarkable and shareable.
+      // The fragment is never sent to the server, so the page stays fully static.
+      function writeHash(v, mode) {
+        var parts = ["mode=" + mode];
+        KEYS.forEach(function (k) {
+          if (isFinite(v[k])) parts.push(k + "=" + v[k]);
+        });
+        history.replaceState(null, "", "#" + parts.join("&"));
+      }
+
+      function readHash() {
+        var raw = location.hash.replace(/^#/, "");
+        if (!raw) return;
+        raw.split("&").forEach(function (pair) {
+          var kv = pair.split("=");
+          var k = decodeURIComponent(kv[0]);
+          var val = decodeURIComponent(kv[1] || "");
+          if (k === "mode") {
+            modeRadios.forEach(function (r) { r.checked = (r.value === val); });
+          } else if (inputs[k] && isFinite(parseFloat(val))) {
+            inputs[k].value = val;
+          }
+        });
+      }
+
+      KEYS.forEach(function (k) { inputs[k].addEventListener("input", compute); });
+      modeRadios.forEach(function (r) { r.addEventListener("change", compute); });
+      window.addEventListener("hashchange", function () { readHash(); compute(); });
+
+      readHash();
+      compute();
+    </script>
+  </body>
+</html>
