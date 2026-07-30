@@ -39,355 +39,364 @@
 
       * { box-sizing: border-box; }
 
+      .hidden { display: none; }
+
+      html { height: 100%; }
+
       body {
         margin: 0;
-        padding: 3rem 1.5rem 4rem;
+        /* The page is exactly the viewport and never scrolls: the cross-section absorbs
+           whatever vertical space is left over. dvh rather than vh so mobile browser
+           chrome doesn't push content out of view. */
+        height: 100dvh;
+        overflow: hidden;
+        display: grid;
+        grid-template-columns: 21rem minmax(0, 1fr) 19rem;
+        grid-template-rows: auto minmax(0, 1fr) auto;
+        gap: 0.8rem;
+        padding: 0.9rem 1.1rem 0.8rem;
         background: var(--bg);
         color: var(--fg);
-        font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
         -webkit-font-smoothing: antialiased;
       }
 
-      main { max-width: 58rem; margin: 0 auto; }
+      /* Explicit placement — never rely on source order, which is what put the results
+         panel in a phantom fourth row during mockup. */
+      .titlebar { grid-area: 1 / 1 / 2 / 4; }
+      .controls  { grid-area: 2 / 1 / 3 / 2; }
+      .figure    { grid-area: 2 / 2 / 3 / 3; }
+      .results   { grid-area: 2 / 3 / 3 / 4; }
+      .methodbar { grid-area: 3 / 1 / 4 / 4; }
 
-      header { margin-bottom: 2.5rem; }
-
-      h1 {
-        margin: 0 0 0.6rem;
-        font-size: clamp(1.6rem, 4vw, 2.1rem);
-        letter-spacing: -0.02em;
-        font-weight: 620;
-      }
-
-      .tagline {
-        margin: 0;
-        max-width: 36rem;
-        color: var(--muted);
-        font-size: 1rem;
-      }
-
-      .cols {
-        display: grid;
-        gap: 1.25rem;
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-      }
-
-      @media (max-width: 46rem) {
-        .cols { grid-template-columns: 1fr; }
-      }
-
-      .card {
-        padding: 1.4rem 1.5rem 1.5rem;
+      .panel {
+        min-width: 0;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        padding: 0.9rem 1.05rem 1rem;
         border: 1px solid var(--line);
-        border-radius: 10px;
+        border-radius: 9px;
         background: var(--card);
       }
 
-      .hidden { display: none; }
-
       h2 {
-        margin: 0 0 1.1rem;
-        font-size: 0.78rem;
+        flex: 0 0 auto;
+        margin: 0 0 0.8rem;
+        font-size: 0.69rem;
         font-weight: 600;
         letter-spacing: 0.11em;
         text-transform: uppercase;
         color: var(--muted);
       }
 
-      .modes {
+      .titlebar {
         display: flex;
-        gap: 0.5rem;
-        margin-bottom: 1.35rem;
+        align-items: baseline;
+        gap: 0.75rem;
+        padding: 0 0.3rem;
       }
+
+      h1 {
+        margin: 0;
+        font-size: 1.1rem;
+        font-weight: 620;
+        letter-spacing: -0.01em;
+      }
+
+      .titlebar p { margin: 0; color: var(--muted); font-size: 0.8rem; }
+
+      /* ---- controls ---- */
+
+      .modes { display: flex; gap: 0.4rem; margin-bottom: 0.85rem; flex: 0 0 auto; }
 
       .modes label {
         flex: 1;
-        padding: 0.5rem 0.6rem;
+        padding: 0.35rem 0.4rem;
         border: 1px solid var(--line);
-        border-radius: 7px;
-        font-size: 0.86rem;
+        border-radius: 6px;
+        font-size: 0.83rem;
         text-align: center;
+        white-space: nowrap;
         cursor: pointer;
         transition: border-color 0.15s ease, color 0.15s ease;
       }
 
       .modes input { position: absolute; opacity: 0; pointer-events: none; }
-
-      .modes label:has(input:checked) {
-        border-color: var(--accent);
-        color: var(--accent);
-        font-weight: 560;
-      }
-
+      .modes label:has(input:checked) { border-color: var(--accent); color: var(--accent); font-weight: 560; }
       .modes label:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-      .field {
-        display: grid;
-        grid-template-columns: 1fr 7.5rem;
-        align-items: center;
-        gap: 0.5rem 0.9rem;
-        margin-bottom: 0.7rem;
-      }
+      .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 0.55rem 0.7rem; }
 
+      .field { display: grid; gap: 0.15rem; min-width: 0; }
       .field.hidden { display: none; }
 
-      .field label { font-size: 0.93rem; }
-
-      .field .sub {
-        display: block;
-        color: var(--muted);
-        font-size: 0.79rem;
-        line-height: 1.35;
-      }
+      .field label { font-size: 0.77rem; color: var(--muted); }
+      .field .sym { color: var(--fg); font-weight: 560; font-style: italic; }
 
       .field input {
         width: 100%;
-        padding: 0.42rem 0.55rem;
+        padding: 0.34rem 0.5rem;
         border: 1px solid var(--line);
         border-radius: 6px;
         background: var(--bg);
         color: var(--fg);
         font: inherit;
-        font-size: 0.95rem;
+        font-size: 0.92rem;
         font-variant-numeric: tabular-nums;
       }
 
       .field input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
-      figure { margin: 1.5rem 0 0; }
+      .hint {
+        flex: 0 0 auto;
+        margin: 0.9rem 0 0;
+        padding-top: 0.75rem;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 0.76rem;
+        line-height: 1.45;
+      }
 
-      svg { display: block; width: 100%; height: auto; }
+      /* ---- cross-section ---- */
 
-      figcaption {
+      .figwrap { flex: 1 1 auto; min-height: 0; position: relative; }
+      .figwrap svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+      .figcap {
+        flex: 0 0 auto;
         margin-top: 0.5rem;
         color: var(--muted);
-        font-size: 0.79rem;
+        font-size: 0.74rem;
         text-align: center;
       }
 
+      /* ---- results ---- */
+
+      .results { overflow: hidden; }
+
+      /* Must be a class, not an inline style — an inline display would out-specify
+         .hidden and the results would refuse to hide on an invalid input. */
+      .results-body {
+        flex: 1 1 auto;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .results-body.hidden { display: none; }
+
       .primary {
-        margin-bottom: 1.35rem;
-        padding-bottom: 1.2rem;
+        flex: 0 0 auto;
+        margin-bottom: 0.75rem;
+        padding-bottom: 0.7rem;
         border-bottom: 1px solid var(--line);
       }
 
       .primary .label {
         display: block;
         color: var(--muted);
-        font-size: 0.78rem;
+        font-size: 0.69rem;
         font-weight: 600;
         letter-spacing: 0.11em;
         text-transform: uppercase;
       }
 
       .primary .value {
-        font-size: clamp(1.7rem, 5vw, 2.3rem);
+        font-size: clamp(1.6rem, 2.5vw, 2.2rem);
         font-weight: 620;
         letter-spacing: -0.02em;
         font-variant-numeric: tabular-nums;
         color: var(--accent);
       }
 
-      .primary .unit { font-size: 0.55em; font-weight: 500; color: var(--muted); }
+      .primary .unit { font-size: 0.5em; font-weight: 500; color: var(--muted); }
+
+      /* Safety valve: the page never scrolls, but on a short window the metric list may.
+         At 1080p there is ample room and this never engages. */
+      .metrics { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 
       dl {
         display: grid;
         grid-template-columns: 1fr auto;
-        gap: 0.42rem 1rem;
+        gap: 0.36rem 0.9rem;
         margin: 0;
-        font-size: 0.93rem;
+        font-size: 0.87rem;
       }
 
-      dt { color: var(--muted); }
-
-      dd {
-        margin: 0;
-        text-align: right;
-        font-variant-numeric: tabular-nums;
-      }
-
+      dt { color: var(--muted); white-space: nowrap; }
+      dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
       dd .unit { color: var(--muted); font-size: 0.85em; }
 
       .note {
-        margin: 1.2rem 0 0;
-        padding: 0.7rem 0.85rem;
-        border-radius: 7px;
-        font-size: 0.87rem;
-        line-height: 1.5;
+        flex: 0 0 auto;
+        margin-top: 0.7rem;
+        padding: 0.5rem 0.65rem;
+        border-radius: 6px;
+        font-size: 0.79rem;
+        line-height: 1.45;
       }
 
       .note.warn { background: var(--warn-bg); color: var(--warn); }
       .note.err  { background: var(--err-bg);  color: var(--err); }
-      .note.hidden { display: none; }
 
-      footer {
-        margin-top: 3rem;
-        padding-top: 1.4rem;
-        border-top: 1px solid var(--line);
+      .methodbar {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 0 0.35rem;
         color: var(--muted);
-        font-size: 0.88rem;
+        font-size: 0.74rem;
       }
 
-      footer p { margin: 0 0 0.6rem; }
-      footer a { color: inherit; }
+      .methodbar p { margin: 0; }
+      .methodbar a { color: inherit; }
+      code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.95em; }
 
-      code {
-        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-        font-size: 0.92em;
+      /* Three columns need width. Below that, stack and let the page scroll — the
+         no-scroll guarantee is a desktop promise, not a reason to break small screens. */
+      @media (max-width: 68rem) {
+        body {
+          height: auto;
+          min-height: 100dvh;
+          overflow: visible;
+          grid-template-columns: minmax(0, 1fr);
+          grid-template-rows: none;
+          padding: 1.4rem 1.1rem 2rem;
+        }
+        .titlebar, .controls, .figure, .results, .methodbar { grid-area: auto; }
+        .titlebar { flex-direction: column; gap: 0.3rem; }
+        .figwrap { height: 46vw; min-height: 15rem; }
+        .metrics { overflow: visible; }
       }
     </style>
   </head>
   <body>
-    <main>
-      <header>
-        <h1>Manning's equation — trapezoidal channel</h1>
-        <p class="tagline">
-          Solve for normal depth from a discharge, or discharge from a depth. Symmetric
-          trapezoidal section, SI units. Everything runs in your browser — no data leaves
-          this page.
-        </p>
-      </header>
+    <div class="titlebar">
+      <h1>Manning's equation — trapezoidal channel</h1>
+      <p>Uniform steady flow · symmetric trapezoid · SI units</p>
+    </div>
 
-      <div class="cols">
-        <section class="card">
-          <h2>Inputs</h2>
+    <section class="panel controls">
+      <h2>Inputs</h2>
 
-          <div class="modes" role="radiogroup" aria-label="Solve for">
-            <label>
-              <input type="radio" name="mode" value="depth" checked>
-              Solve for depth
-            </label>
-            <label>
-              <input type="radio" name="mode" value="flow">
-              Solve for discharge
-            </label>
-          </div>
-
-          <div class="field" id="row-Q">
-            <label for="in-Q">
-              Discharge, <em>Q</em>
-              <span class="sub">m³/s</span>
-            </label>
-            <input type="number" id="in-Q" value="5" step="any" min="0" inputmode="decimal">
-          </div>
-
-          <div class="field hidden" id="row-y">
-            <label for="in-y">
-              Flow depth, <em>y</em>
-              <span class="sub">m</span>
-            </label>
-            <input type="number" id="in-y" value="0.8" step="any" min="0" inputmode="decimal">
-          </div>
-
-          <div class="field">
-            <label for="in-b">
-              Bottom width, <em>b</em>
-              <span class="sub">m — use 0 for a triangular channel</span>
-            </label>
-            <input type="number" id="in-b" value="2" step="any" min="0" inputmode="decimal">
-          </div>
-
-          <div class="field">
-            <label for="in-z">
-              Side slope, <em>z</em>
-              <span class="sub">horizontal : vertical — z = 2 means 2 m out per 1 m up. Use 0 for vertical walls</span>
-            </label>
-            <input type="number" id="in-z" value="2" step="any" min="0" inputmode="decimal">
-          </div>
-
-          <div class="field">
-            <label for="in-H">
-              Channel height, <em>H</em>
-              <span class="sub">m — depth of the channel itself, top of bank to invert</span>
-            </label>
-            <input type="number" id="in-H" value="1.5" step="any" min="0" inputmode="decimal">
-          </div>
-
-          <div class="field">
-            <label for="in-n">
-              Manning's <em>n</em>
-              <span class="sub">s/m^(1/3)</span>
-            </label>
-            <input type="number" id="in-n" value="0.03" step="any" min="0" inputmode="decimal">
-          </div>
-
-          <div class="field">
-            <label for="in-S">
-              Bed slope, <em>S₀</em>
-              <span class="sub">m/m</span>
-            </label>
-            <input type="number" id="in-S" value="0.002" step="any" min="0" inputmode="decimal">
-          </div>
-
-          <figure>
-            <div id="diagram" aria-hidden="true"></div>
-            <figcaption id="diagram-caption"></figcaption>
-          </figure>
-        </section>
-
-        <section class="card">
-          <h2>Results</h2>
-
-          <div id="error" class="note err hidden"></div>
-
-          <div id="results">
-            <div class="primary">
-              <span class="label" id="primary-label"></span>
-              <span class="value"><span id="primary-value"></span><span class="unit" id="primary-unit"></span></span>
-            </div>
-
-            <dl>
-              <dt>Flow area, <em>A</em></dt>
-              <dd><span id="out-A"></span> <span class="unit">m²</span></dd>
-
-              <dt>Wetted perimeter, <em>P</em></dt>
-              <dd><span id="out-P"></span> <span class="unit">m</span></dd>
-
-              <dt>Hydraulic radius, <em>R</em></dt>
-              <dd><span id="out-R"></span> <span class="unit">m</span></dd>
-
-              <dt>Top width, <em>T</em></dt>
-              <dd><span id="out-T"></span> <span class="unit">m</span></dd>
-
-              <dt>Mean velocity, <em>V</em></dt>
-              <dd><span id="out-V"></span> <span class="unit">m/s</span></dd>
-
-              <dt>Froude number, <em>Fr</em></dt>
-              <dd><span id="out-Fr"></span></dd>
-
-              <dt>Flow regime</dt>
-              <dd><span id="out-regime"></span></dd>
-
-              <dt>Capacity at <em>H</em></dt>
-              <dd><span id="out-Qfull"></span> <span class="unit">m³/s</span></dd>
-
-              <dt id="dt-free">Freeboard</dt>
-              <dd><span id="out-free"></span> <span class="unit">m</span></dd>
-            </dl>
-
-            <div id="warn" class="note warn hidden"></div>
-          </div>
-        </section>
+      <div class="modes" role="radiogroup" aria-label="Solve for">
+        <label>
+          <input type="radio" name="mode" value="depth" checked>
+          Solve for depth
+        </label>
+        <label>
+          <input type="radio" name="mode" value="flow">
+          Solve for <em>Q</em>
+        </label>
       </div>
 
-      <footer>
-        <p>
-          Uniform steady flow, <code>Q = (1/n)·A·R^(2/3)·√S₀</code> with SI units
-          (<code>k = 1.0</code>). Normal depth is found by bisection on a strictly
-          increasing <code>Q(y)</code>, so the root is unique.
-        </p>
-        <p>
-          Results assume the channel is prismatic and the flow uniform. Near-critical flow,
-          backwater effects and non-uniform sections are outside what this calculates.
-          <a href="https://briannei.com/">briannei.com</a>
-        </p>
-      </footer>
-    </main>
+      <div class="fields">
+        <div class="field" id="row-Q">
+          <label for="in-Q"><span class="sym">Q</span> — discharge, m³/s</label>
+          <input type="number" id="in-Q" value="5" step="any" inputmode="decimal">
+        </div>
+
+        <div class="field hidden" id="row-y">
+          <label for="in-y"><span class="sym">y</span> — flow depth, m</label>
+          <input type="number" id="in-y" value="0.8" step="any" inputmode="decimal">
+        </div>
+
+        <div class="field">
+          <label for="in-b"><span class="sym">b</span> — bottom width, m</label>
+          <input type="number" id="in-b" value="2" step="any" inputmode="decimal">
+        </div>
+
+        <div class="field">
+          <label for="in-z"><span class="sym">z</span> — side slope, H:V</label>
+          <input type="number" id="in-z" value="2" step="any" inputmode="decimal">
+        </div>
+
+        <div class="field">
+          <label for="in-H"><span class="sym">H</span> — channel height, m</label>
+          <input type="number" id="in-H" value="1.5" step="any" inputmode="decimal">
+        </div>
+
+        <div class="field">
+          <label for="in-n"><span class="sym">n</span> — Manning's n</label>
+          <input type="number" id="in-n" value="0.03" step="any" inputmode="decimal">
+        </div>
+
+        <div class="field">
+          <label for="in-S"><span class="sym">S₀</span> — bed slope, m/m</label>
+          <input type="number" id="in-S" value="0.002" step="any" inputmode="decimal">
+        </div>
+      </div>
+
+      <p class="hint">
+        <em>z</em> is horizontal run per unit rise — <em>z</em> = 2 means 2 m out for every
+        1 m up. Use 0 for vertical walls, or <em>b</em> = 0 for a triangular section.
+        <em>H</em> is the channel itself, invert to top of bank.
+      </p>
+    </section>
+
+    <section class="panel figure">
+      <h2>Cross-section</h2>
+      <div class="figwrap" id="diagram"></div>
+      <div class="figcap" id="figcap">Drawn to scale · dashed line is top of bank</div>
+    </section>
+
+    <section class="panel results">
+      <h2>Results</h2>
+
+      <div id="error" class="note err hidden"></div>
+
+      <div id="results-body" class="results-body">
+        <div class="primary">
+          <span class="label" id="primary-label">Normal depth</span>
+          <span class="value"><span id="primary-value">—</span><span class="unit" id="primary-unit"> m</span></span>
+        </div>
+
+        <div class="metrics">
+          <dl>
+            <dt>Flow area, <em>A</em></dt>
+            <dd><span id="out-A">—</span> <span class="unit">m²</span></dd>
+
+            <dt>Wetted perimeter, <em>P</em></dt>
+            <dd><span id="out-P">—</span> <span class="unit">m</span></dd>
+
+            <dt>Hydraulic radius, <em>R</em></dt>
+            <dd><span id="out-R">—</span> <span class="unit">m</span></dd>
+
+            <dt>Top width, <em>T</em></dt>
+            <dd><span id="out-T">—</span> <span class="unit">m</span></dd>
+
+            <dt>Mean velocity, <em>V</em></dt>
+            <dd><span id="out-V">—</span> <span class="unit">m/s</span></dd>
+
+            <dt>Froude number, <em>Fr</em></dt>
+            <dd><span id="out-Fr">—</span></dd>
+
+            <dt>Flow regime</dt>
+            <dd><span id="out-regime">—</span></dd>
+
+            <dt>Capacity at <em>H</em></dt>
+            <dd><span id="out-Qfull">—</span> <span class="unit">m³/s</span></dd>
+
+            <dt id="dt-free">Freeboard</dt>
+            <dd><span id="out-free">—</span> <span class="unit">m</span></dd>
+          </dl>
+        </div>
+
+        <div id="warn" class="note warn hidden"></div>
+      </div>
+    </section>
+
+    <div class="methodbar">
+      <p><code>Q = (1/n)·A·R^(2/3)·√S₀</code> · normal depth by bisection on a strictly increasing <code>Q(y)</code> · prismatic channel, uniform flow</p>
+      <p><a href="https://briannei.com/">briannei.com</a></p>
+    </div>
 
     <script>
       "use strict";
 
-      // ---- Pure hydraulics. No DOM access below this line until the UI section. ----
+      // ---- Pure hydraulics. No DOM access until the UI section. ----
 
       var G = 9.80665;      // m/s^2
       var Y_MAX = 1e6;      // m, bracketing guard so a pathological input can't spin forever
@@ -432,13 +441,9 @@
         return (lo + hi) / 2;
       }
 
-      // Froude number and regime. The band around unity is reported as near-critical
-      // rather than pinned to Fr = 1.000 — uniform-flow assumptions are unreliable there
-      // and claiming exact criticality would be false precision.
-      function froude(V, D) {
-        return D > 0 ? V / Math.sqrt(G * D) : Infinity;
-      }
-
+      // The band around unity is reported as near-critical rather than pinned to Fr = 1.000
+      // — uniform-flow assumptions are unreliable there and exact criticality would be
+      // false precision.
       function regime(Fr) {
         if (!isFinite(Fr)) return "—";
         if (Fr > 0.95 && Fr < 1.05) return "Near critical";
@@ -474,63 +479,83 @@
 
       // ---- Cross-section drawing ----
 
-      function drawSection(b, z, H, y) {
-        var W = 440, HP = 250, pad = 32;
+      // The viewBox is generated from the container's real pixel size rather than being a
+      // fixed aspect ratio, so the section fills the space it is given instead of being
+      // letterboxed by preserveAspectRatio. One user unit = one CSS pixel, which also keeps
+      // stroke widths and label sizes consistent at any panel size.
+      function drawSection(b, z, H, y, W, Hpx) {
+        // Side padding leaves room for the y and freeboard labels, which sit outside the
+        // channel walls. Scaled down on narrow panels so the shape keeps priority there.
+        var padX = Math.min(84, Math.max(26, W * 0.09));
+        var padTop = 30, padBottom = 40;
+        if (!(W > padX * 2 + 20) || !(Hpx > padTop + padBottom + 20)) return "";
+
         var yTop = Math.max(H, y);
         var worldW = b + 2 * z * yTop;
         var worldH = yTop;
         if (!(worldW > 0) || !(worldH > 0)) return "";
 
-        var s = Math.min((W - 2 * pad) / worldW, (HP - 2 * pad) / worldH);
-        var cx = W / 2, base = HP - pad;
-        function X(xw) { return (cx + xw * s).toFixed(1); }
-        function Y(yw) { return (base - yw * s).toFixed(1); }
+        var s = Math.min((W - 2 * padX) / worldW, (Hpx - padTop - padBottom) / worldH);
+        var cx = W / 2;
+        var base = Hpx - padBottom - (Hpx - padTop - padBottom - worldH * s) / 2;
 
-        function pts(depth) {
+        function X(a) { return (cx + a * s).toFixed(1); }
+        function Y(a) { return (base - a * s).toFixed(1); }
+
+        function pts(d) {
           return [
-            [-(b / 2) - z * depth, depth],
+            [-(b / 2) - z * d, d],
             [-(b / 2), 0],
             [b / 2, 0],
-            [(b / 2) + z * depth, depth]
+            [(b / 2) + z * d, d]
           ].map(function (p) { return X(p[0]) + "," + Y(p[1]); }).join(" ");
         }
 
         var over = y > H;
-        var parts = [];
+        var o = [];
 
-        // Water first so the channel outline draws on top of it.
+        // Water first so the channel outline draws over it.
         if (y > 0) {
-          parts.push('<polygon points="' + pts(y) + '" fill="var(--water)" fill-opacity="0.55"/>');
-          parts.push('<line x1="' + X(-(b / 2) - z * y) + '" y1="' + Y(y) +
-                     '" x2="' + X((b / 2) + z * y) + '" y2="' + Y(y) +
-                     '" stroke="var(--water)" stroke-width="2"/>');
+          o.push('<polygon points="' + pts(y) + '" fill="var(--water)" fill-opacity="0.5"/>');
+          o.push('<line x1="' + X(-(b / 2) - z * y) + '" y1="' + Y(y) +
+                 '" x2="' + X((b / 2) + z * y) + '" y2="' + Y(y) +
+                 '" stroke="var(--water)" stroke-width="2.5"/>');
         }
 
-        // Channel walls, drawn to H.
-        parts.push('<polyline points="' + pts(H) + '" fill="none" stroke="var(--fg)" ' +
-                   'stroke-width="2" stroke-linejoin="round"/>');
+        o.push('<polyline points="' + pts(H) + '" fill="none" stroke="var(--fg)" ' +
+               'stroke-width="2.5" stroke-linejoin="round"/>');
 
-        // Mark the top of bank only when the water surface is somewhere else, so the
-        // overtopping case reads unambiguously instead of being clipped away.
+        // Mark the top of bank only when the water surface is elsewhere, so overtopping
+        // reads unambiguously instead of being clipped away.
         if (Math.abs(y - H) > 1e-9) {
-          parts.push('<line x1="' + X(-(b / 2) - z * H) + '" y1="' + Y(H) +
-                     '" x2="' + X((b / 2) + z * H) + '" y2="' + Y(H) +
-                     '" stroke="' + (over ? "var(--err)" : "var(--line)") +
-                     '" stroke-width="1" stroke-dasharray="4 3"/>');
+          o.push('<line x1="' + X(-(b / 2) - z * H) + '" y1="' + Y(H) +
+                 '" x2="' + X((b / 2) + z * H) + '" y2="' + Y(H) +
+                 '" stroke="' + (over ? "var(--err)" : "var(--line)") +
+                 '" stroke-width="1.5" stroke-dasharray="5 4"/>');
         }
 
-        parts.push('<text x="' + X(0) + '" y="' + (base + 17) +
-                   '" fill="var(--muted)" font-size="11" text-anchor="middle">b = ' +
-                   fmt(b) + ' m</text>');
+        var lab = 'font-size="12.5" font-family="ui-sans-serif, system-ui, sans-serif"';
+
+        o.push('<text x="' + X(0) + '" y="' + (base + 22) + '" fill="var(--muted)" ' + lab +
+               ' text-anchor="middle">b = ' + fmt(b) + ' m</text>');
 
         if (y > 0) {
-          parts.push('<text x="' + X((b / 2) + z * y + 0.04 * worldW) + '" y="' + Y(y) +
-                     '" fill="' + (over ? "var(--err)" : "var(--muted)") +
-                     '" font-size="11" dominant-baseline="middle">y = ' + fmt(y) + ' m</text>');
+          o.push('<text x="' + X((b / 2) + z * y) + '" y="' + (parseFloat(Y(y)) - 9).toFixed(1) +
+                 '" fill="' + (over ? "var(--err)" : "var(--water)") + '" ' + lab +
+                 ' text-anchor="end">T = ' + fmt(b + 2 * z * y) + ' m</text>');
+          o.push('<text x="' + (parseFloat(X(-(b / 2) - z * y)) - 8).toFixed(1) + '" y="' + Y(y / 2) +
+                 '" fill="' + (over ? "var(--err)" : "var(--muted)") + '" ' + lab +
+                 ' text-anchor="end" dominant-baseline="middle">y = ' + fmt(y) + ' m</text>');
         }
 
-        return '<svg viewBox="0 0 ' + W + ' ' + HP + '" role="img" ' +
-               'aria-label="Trapezoidal channel cross-section">' + parts.join("") + '</svg>';
+        if (!over && H - y > 1e-9) {
+          o.push('<text x="' + (parseFloat(X((b / 2) + z * H)) + 8).toFixed(1) + '" y="' + Y((H + y) / 2) +
+                 '" fill="var(--muted)" ' + lab + ' dominant-baseline="middle">' +
+                 fmt(H - y) + ' m</text>');
+        }
+
+        return '<svg viewBox="0 0 ' + W.toFixed(0) + ' ' + Hpx.toFixed(0) + '" role="img" ' +
+               'aria-label="Trapezoidal channel cross-section">' + o.join("") + '</svg>';
       }
 
       // ---- UI ----
@@ -540,23 +565,14 @@
       KEYS.forEach(function (k) { inputs[k] = document.getElementById("in-" + k); });
 
       var modeRadios = Array.prototype.slice.call(document.querySelectorAll('input[name="mode"]'));
-      var el = {
-        rowQ: document.getElementById("row-Q"),
-        rowY: document.getElementById("row-y"),
-        error: document.getElementById("error"),
-        results: document.getElementById("results"),
-        warn: document.getElementById("warn"),
-        primaryLabel: document.getElementById("primary-label"),
-        primaryValue: document.getElementById("primary-value"),
-        primaryUnit: document.getElementById("primary-unit"),
-        diagram: document.getElementById("diagram"),
-        caption: document.getElementById("diagram-caption"),
-        dtFree: document.getElementById("dt-free"),
-        out: {}
-      };
+      var $ = function (id) { return document.getElementById(id); };
+      var out = {};
       ["A", "P", "R", "T", "V", "Fr", "regime", "Qfull", "free"].forEach(function (k) {
-        el.out[k] = document.getElementById("out-" + k);
+        out[k] = $("out-" + k);
       });
+
+      var diagram = $("diagram");
+      var shape = null;   // last valid geometry, so a resize can redraw without recomputing
 
       function currentMode() {
         for (var i = 0; i < modeRadios.length; i++) {
@@ -565,35 +581,34 @@
         return "depth";
       }
 
-      function readInputs() {
-        var v = {};
-        KEYS.forEach(function (k) { v[k] = parseFloat(inputs[k].value); });
-        return v;
+      function showError(messages) {
+        $("error").innerHTML = messages.join("<br>");
+        $("error").classList.remove("hidden");
+        $("results-body").classList.add("hidden");
+        $("warn").classList.add("hidden");   // don't leave a stale warning under an error
+        shape = null;
+        diagram.innerHTML = "";
       }
 
-      function showError(messages) {
-        el.error.innerHTML = messages.join("<br>");
-        el.error.classList.remove("hidden");
-        el.results.classList.add("hidden");
-        el.warn.classList.add("hidden");   // don't leave a stale warning under an error
+      function redraw() {
+        if (!shape) return;
+        var r = diagram.getBoundingClientRect();
+        diagram.innerHTML = drawSection(shape.b, shape.z, shape.H, shape.y, r.width, r.height);
       }
 
       function compute() {
         var mode = currentMode();
-        el.rowQ.classList.toggle("hidden", mode !== "depth");
-        el.rowY.classList.toggle("hidden", mode !== "flow");
+        $("row-Q").classList.toggle("hidden", mode !== "depth");
+        $("row-y").classList.toggle("hidden", mode !== "flow");
 
-        var v = readInputs();
+        var v = {};
+        KEYS.forEach(function (k) { v[k] = parseFloat(inputs[k].value); });
+
         var problems = validate(v, mode);
-        if (problems.length) {
-          showError(problems);
-          el.diagram.innerHTML = "";
-          el.caption.textContent = "";
-          return;
-        }
+        if (problems.length) { showError(problems); return; }
 
-        el.error.classList.add("hidden");
-        el.results.classList.remove("hidden");
+        $("error").classList.add("hidden");
+        $("results-body").classList.remove("hidden");
 
         var y, Q;
         if (mode === "depth") {
@@ -610,52 +625,43 @@
 
         var s = section(v.b, v.z, y);
         var V = s.A > 0 ? Q / s.A : 0;
-        var Fr = froude(V, s.D);
-        var Qfull = discharge(v.b, v.z, v.H, v.n, v.S);
+        var Fr = s.D > 0 ? V / Math.sqrt(G * s.D) : Infinity;
         var freeboard = v.H - y;
 
-        if (mode === "depth") {
-          el.primaryLabel.textContent = "Normal depth";
-          el.primaryValue.textContent = fmt(y);
-          el.primaryUnit.textContent = " m";
-        } else {
-          el.primaryLabel.textContent = "Discharge";
-          el.primaryValue.textContent = fmt(Q);
-          el.primaryUnit.textContent = " m³/s";
-        }
+        $("primary-label").textContent = mode === "depth" ? "Normal depth" : "Discharge";
+        $("primary-value").textContent = fmt(mode === "depth" ? y : Q);
+        $("primary-unit").textContent = mode === "depth" ? " m" : " m³/s";
 
-        el.out.A.textContent = fmt(s.A);
-        el.out.P.textContent = fmt(s.P);
-        el.out.R.textContent = fmt(s.R);
-        el.out.T.textContent = fmt(s.T);
-        el.out.V.textContent = fmt(V);
-        el.out.Fr.textContent = fmt(Fr);
-        el.out.regime.textContent = regime(Fr);
-        el.out.Qfull.textContent = fmt(Qfull);
-        el.out.free.textContent = fmt(Math.abs(freeboard));
-        el.dtFree.textContent = freeboard < 0 ? "Depth above bank" : "Freeboard";
+        out.A.textContent = fmt(s.A);
+        out.P.textContent = fmt(s.P);
+        out.R.textContent = fmt(s.R);
+        out.T.textContent = fmt(s.T);
+        out.V.textContent = fmt(V);
+        out.Fr.textContent = fmt(Fr);
+        out.regime.textContent = regime(Fr);
+        out.Qfull.textContent = fmt(discharge(v.b, v.z, v.H, v.n, v.S));
+        out.free.textContent = fmt(Math.abs(freeboard));
+        $("dt-free").textContent = freeboard < 0 ? "Depth above bank" : "Freeboard";
 
         var notes = [];
         if (freeboard < 0) {
           notes.push("<strong>Channel overtops.</strong> The water surface sits " +
                      fmt(-freeboard) + " m above the top of bank, so the section cannot " +
-                     "carry this flow — results describe an unconfined trapezoid, not the real channel.");
+                     "carry this flow — results describe an unconfined trapezoid.");
         }
         if (Fr > 0.95 && Fr < 1.05) {
           notes.push("<strong>Near critical.</strong> Uniform-flow calculations are " +
-                     "unreliable within a few percent of Fr = 1; the depth here is sensitive " +
-                     "to small changes in slope or roughness.");
+                     "unreliable within a few percent of Fr = 1.");
         }
         if (notes.length) {
-          el.warn.innerHTML = notes.join("<br><br>");
-          el.warn.classList.remove("hidden");
+          $("warn").innerHTML = notes.join("<br><br>");
+          $("warn").classList.remove("hidden");
         } else {
-          el.warn.classList.add("hidden");
+          $("warn").classList.add("hidden");
         }
 
-        el.diagram.innerHTML = drawSection(v.b, v.z, v.H, y);
-        el.caption.textContent = "Section drawn to scale. Dashed line is the top of bank.";
-
+        shape = { b: v.b, z: v.z, H: v.H, y: y };
+        redraw();
         writeHash(v, mode);
       }
 
@@ -663,9 +669,7 @@
       // The fragment is never sent to the server, so the page stays fully static.
       function writeHash(v, mode) {
         var parts = ["mode=" + mode];
-        KEYS.forEach(function (k) {
-          if (isFinite(v[k])) parts.push(k + "=" + v[k]);
-        });
+        KEYS.forEach(function (k) { if (isFinite(v[k])) parts.push(k + "=" + v[k]); });
         history.replaceState(null, "", "#" + parts.join("&"));
       }
 
@@ -687,6 +691,13 @@
       KEYS.forEach(function (k) { inputs[k].addEventListener("input", compute); });
       modeRadios.forEach(function (r) { r.addEventListener("change", compute); });
       window.addEventListener("hashchange", function () { readHash(); compute(); });
+
+      // Redraw on any panel resize so the section keeps filling its column.
+      if (window.ResizeObserver) {
+        new ResizeObserver(redraw).observe(diagram);
+      } else {
+        window.addEventListener("resize", redraw);
+      }
 
       readHash();
       compute();
