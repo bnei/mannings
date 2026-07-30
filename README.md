@@ -4,6 +4,15 @@ Manning's equation solver for symmetric trapezoidal channels. Solves either dire
 normal depth from a discharge, or discharge from a depth — and reports the core hydraulics
 plus Froude number and flow regime.
 
+It also draws a **sensitivity sweep**: hold every input fixed but one, and see the response
+as a curve. The swept parameter is picked with the radio beside its field, over an explicit
+range. The response is whichever quantity the current mode solves for, so sweeping the mode's
+own fixed input gives the rating curve. Shading marks where the channel would overtop, and a
+dot marks the values currently in the fields.
+
+The sweep reports a response, not a recommendation — there is no inverse solve and no
+optimizer. See [docs/adr/0001](./docs/adr/0001-sensitivity-sweep-not-an-optimizer.md).
+
 SI units only (`k = 1.0`), so there is no unit conversion anywhere in the code.
 
 ## Running it
@@ -44,5 +53,9 @@ few percent of `Fr = 1`, and flagged when the computed depth exceeds the channel
 Backwater effects, non-uniform sections, composite roughness and critical-depth
 calculations are out of scope.
 
-Inputs are mirrored into the URL fragment, so any configuration is bookmarkable. The
-fragment is never transmitted to the server.
+Inputs are mirrored into the URL fragment, so any configuration is bookmarkable — including
+the swept parameter and its range, so a shared link reproduces the same figure. The fragment
+is never transmitted to the server.
+
+Sweep axes are linear, never logarithmic: a log axis cannot represent zero, and `b = 0` and
+`z = 0` are valid sections that must stay sweepable. The response axis always starts at zero.

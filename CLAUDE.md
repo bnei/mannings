@@ -21,18 +21,34 @@ that these three properties don't cover. If a future phase genuinely needs one, 
 explicitly rather than absorbing it.
 
 **The pure/impure seam.** The hydraulics functions at the top of the `<script>` block
-(`section`, `discharge`, `normalDepth`, `regime`, `fmt`, `validate`) touch no DOM. Keep it
-that way — when these tools grow into a shared library the seam is already cut. Everything
-below the `---- UI ----` comment may touch the DOM.
+(`section`, `discharge`, `normalDepth`, `regime`, `fmt`, `validate`) touch no DOM, and neither
+do the sweep functions that follow them (`sweepable`, `sweepRange`, `validateRange`,
+`sweepPoint`, `sweep`). Keep it that way — when these tools grow into a shared library the
+seam is already cut. Everything below the `---- UI ----` comment may touch the DOM.
+
+`sweep()` returns samples carrying **both** the response and the overtopping threshold from
+one pass, so `drawSweep` does no hydraulics at all — it only maps numbers to pixels, exactly
+as `drawSection` does. That is what stops the shaded boundary and the curve being computed
+from different assumptions. Don't move a `discharge()` call below the seam to save an array
+field.
+
+**Terminology lives in [CONTEXT.md](./CONTEXT.md)** — a glossary, no implementation detail.
+Architectural decisions live in [docs/adr/](./docs/adr/). Two exist: the sweep is
+deliberately not an optimizer, and the sweep's response is the solve mode rather than a
+separate control. Read those before adding to the sweep.
 
 ## Hard constraints
 
 **No scrolling on a 1080p monitor.** This is a stated requirement, not a preference. It is
 enforced structurally rather than by tuning: `body { height: 100dvh; overflow: hidden }`
-with a CSS grid whose middle row is `minmax(0, 1fr)`, and the cross-section SVG absorbs all
-leftover space. `dvh` not `vh`, so mobile browser chrome can't push content out of view.
-Below `68rem` the layout stacks and page scrolling is allowed — the guarantee is a desktop
-promise, not a reason to break phones.
+with a CSS grid whose middle row is `minmax(0, 1fr)`, and the two figure SVGs absorb all
+leftover space between them. `dvh` not `vh`, so mobile browser chrome can't push content out
+of view. Below `68rem` the layout stacks and page scrolling is allowed — the guarantee is a
+desktop promise, not a reason to break phones.
+
+Verified at 1920×1080: `scrollWidth`/`scrollHeight` both exactly 1920/1080, no panel clipped,
+`.figwrap` 1184×406 each. Also checked at 1088px (the breakpoint) and 390px — no horizontal
+scroll at either.
 
 Consequences to respect:
 - Every grid item needs explicit `grid-area`. Relying on source order already caused one
@@ -42,6 +58,17 @@ Consequences to respect:
   engages.
 - Never set `display` inline on an element that also gets a `.hidden` class — inline styles
   out-specify the class and the element refuses to hide. This has bitten twice.
+- The figure column holds **two** figures in one panel: cross-section above, sweep chart
+  below, split by a hairline on the second `h2` rather than a divider element. Both are
+  `flex: 1 1 0` so they take equal halves regardless of content; `flex-basis: auto` would let
+  contents decide and `height` in the stacked media query would lose to a `0` basis, which is
+  why that query resets `flex` to `0 0 auto`.
+- One panel, not two, so the vertical budget isn't spent twice on borders and padding.
+- The sweep radio shares a row with the **input**, not the label. Putting it in the label row
+  cost enough width to truncate "b — bottom width, m" to an ellipsis; a 21rem column has room
+  for a full label or a radio beside it, not both. `.fctl` reserves the radio's column even on
+  `H`, which has no radio, so every input box stays 125px. Related: `.field input` is scoped to
+  `[type="number"]`, or the radio inherits the text box's padding, border and background.
 
 **SI units only.** `k = 1.0`, so there is no unit conversion anywhere in the code. That is
 the point: unit conversion is the most likely source of a wrong answer, and this removes
@@ -51,7 +78,20 @@ label layer, and the factor and labels must not be able to disagree.
 **Never vertically exaggerate the cross-section.** A channel section exists to show the
 side slopes; distorting the vertical scale misrepresents `z`. Long profiles get exaggerated
 with an annotation, cross-sections do not. A wide shallow channel legitimately leaves
-whitespace in a tall panel — that is geometry, not a bug to fix.
+whitespace in a tall panel — that is geometry, not a bug to fix. Halving the panel to make
+room for the sweep chart made that whitespace more prominent, not less legitimate.
+
+**Linear sweep axes only.** A log x-axis would read better for `S₀`, which spans 20× across
+its seeded range, but a log axis cannot represent zero and `b = 0` (triangular) and `z = 0`
+(rectangular) must stay sweepable. The seeded `S₀` range is kept narrow instead. Don't
+"improve" this without solving the zero problem first.
+
+**The sweep y-axis always starts at zero** and its top is set by the response, never by the
+threshold. That is what makes the shaded exceedance region visible whenever overtopping occurs
+somewhere in the range: an overtopping sample has response above threshold, so the boundary is
+necessarily on-chart. A threshold far above every response is simply clipped away, which is
+the correct picture of a channel with ample freeboard. A truncated axis would also be
+misleading in a report figure.
 
 ## Conventions in the math
 
@@ -69,12 +109,35 @@ whitespace in a tall panel — that is geometry, not a bug to fix.
   Uniform-flow assumptions are unreliable there and exact criticality would be false
   precision.
 - Results are 4 significant figures via `fmt()`.
+- **`validateRange` is a near-sibling of `validate`, not a clone.** As a *range endpoint*,
+  `Q = 0` and `y = 0` are well defined — both give exactly zero, and `y = 0` is the natural
+  left edge of a rating curve — whereas as *point inputs* they are rejected, because a channel
+  with no water is not a result anyone asked for. Do not "fix" the two to agree.
+- A degenerate sweep sample yields `null`, never `NaN`, and leaves a gap in the curve rather
+  than a straight line across territory with no solution. Nothing non-finite may reach the SVG.
+- The sweep range is seeded per parameter and re-seeded only when the swept parameter or the
+  mode changes — deliberately **not** when the other inputs change. An auto-range that tracked
+  the current value would rescale the axis on every keystroke, so two screenshots taken a
+  minute apart wouldn't be comparable.
 
 ## Verification
 
-Browser tooling in the dev environment has been unreliable for local files. The math is
-verified by **reimplementing it independently in Python** from the equations — not by
-copying the JS — and comparing. Scratch scripts are throwaway; recreate them as needed.
+Browser tooling is unreliable against `file://` URLs — navigation and reload both fail
+intermittently, and a stale snapshot will happily report the *previous* version of the page,
+which is worse than an error. **Serve over HTTP instead.** `.claude/launch.json` defines a
+`static` config (`python -m http.server 8787`); start it and load
+`http://127.0.0.1:8787/index.html`. That path has been reliable. Note that the page still
+must work from `file://` — that constraint is unchanged, it just can't be *verified* that way.
+
+Prefer asserting on DOM geometry over reading screenshots: the screenshot raster in this
+environment renders the viewport at the wrong scale, and element rects are the stronger
+evidence anyway.
+
+The math is verified by **reimplementing it independently in Python** from the equations — not
+by copying the JS — and comparing. For the sweep, dump samples from the live page
+(`sweep(param, lo, hi, v, mode, n)` is global) as JSON and compare columns; the last run was
+122 checks across 7 sweep configurations with 0 failures. Scratch scripts are throwaway;
+recreate them as needed.
 
 Known-good reference values:
 
@@ -86,27 +149,52 @@ Known-good reference values:
 | Triangular `b=0, z=2, y=1, n=0.03, S=0.002` | `Q = 1.7435` |
 | Rectangular `b=2, z=0, y=1, n=0.03, S=0.002` | `Q = 1.8782` |
 
+Sweep reference values, same channel (`b=2, z=2, H=1.5, n=0.03, S=0.002`):
+
+| Sweep | Expected |
+|---|---|
+| depth mode, `Q` = 1 | `y = 0.4706924058` |
+| depth mode, `Q` = 10 | `y = 1.4916624794` |
+| depth mode, `n` = 0.01 (`Q`=5) | `y = 0.6170807542` |
+| depth mode, `S₀` = 0.01 (`Q`=5) | `y = 0.7183463649` |
+| depth mode, `b` = 0 (`Q`=5) | `y = 1.4844859793` |
+| flow mode, `y` = 0.75 | `Q = 2.4330525968` |
+| flow mode, `z` = 3 with `b` = 0, `y` = 1 | `Q = 2.7200434230` |
+| flow mode, `b` = 3 with `z` = 0, `y` = 1 | `Q = 3.1813820870` |
+
 Round-trip check: `normalDepth(discharge(y))` recovers `y = 1.234` to nine decimals.
 
 Edge cases that must stay covered: overtopping warning when `y > H`, error state hides the
 results block *and* any stale warning, blank field shows a prompt rather than garbage,
-near-critical band, no horizontal page scroll at mobile widths.
+near-critical band, no horizontal page scroll at mobile widths. For the sweep: `min >= max`
+and a zero lower bound on `n` or `S₀` each show an explanation *in place of the chart* while
+the point results stay on screen; an invalid point input replaces the chart with a pointer to
+the results panel rather than an unexplained blank box; a mode switch re-seeds the range and
+moves the radio when the swept parameter becomes illegal; `z = 0` with `b` swept from zero
+leaves a one-sample gap rather than a `NaN`; the operating point falling outside the range is
+said so in the caption; a link with no `sweep`/`smin`/`smax` keys falls back to the default.
 
 ## Open items
 
-- **The three-column layout has never been visually verified** — it was built while browser
-  tooling was down. Check for clipping and overflow at 1920×1080 before trusting it.
-- The cross-section uses only ~25% of its panel height at the default geometry. Candidate
-  use for the space: a small **Q vs y curve** with the operating point marked, which would
-  also show the monotonic `Q(y)` the bisection relies on. Not scoped yet.
 - No remote deployment yet. Needs a Cloudflare Pages project (no build command, output =
-  repo root) bound to `mannings.briannei.com`.
+  repo root) bound to `mannings.briannei.com`. Note `.claude/launch.json` now exists in the
+  repo — if output is the repo root, either exclude `.claude/` from the upload or accept that
+  a dev-tooling file gets published.
 - The `briannei-site` landing page does not yet have a card for this tool.
+- The sweep is static by design: no hover readout, no click-to-set-the-operating-point. Both
+  were considered and deferred so that a screenshot is the complete figure and there is no
+  pointer-versus-touch behaviour to maintain. Revisit only with a reason that beats those two.
 
 ## Deliberately out of scope for Phase 1
 
 Circular, rectangular-as-its-own-mode, compound and natural sections; critical depth; US
 customary units; CSV input; composite roughness; an `n` lookup table.
+
+Also out: **inverse solve** ("what `b` gives `y` = 1.2?") and **optimization** ("what section
+minimises excavation?"). The sweep is the substrate for both and forecloses neither, but it
+deliberately reports a response rather than a recommendation — including *not* reporting the
+parameter value where the curve crosses the bank, which is the tempting first step onto that
+path. See `docs/adr/0001`.
 
 ## Repo hygiene
 
