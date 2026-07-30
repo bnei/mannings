@@ -47,8 +47,8 @@ of view. Below `68rem` the layout stacks and page scrolling is allowed — the g
 desktop promise, not a reason to break phones.
 
 Verified at 1920×1080: `scrollWidth`/`scrollHeight` both exactly 1920/1080, no panel clipped,
-`.figwrap` 1184×406 each. Also checked at 1088px (the breakpoint) and 390px — no horizontal
-scroll at either.
+`.figwrap` 1184×404 each with the sweep shown and 1184×835 with it hidden. Also checked at
+1088px (the breakpoint) and 390px — no horizontal scroll at either, in either sweep state.
 
 Consequences to respect:
 - Every grid item needs explicit `grid-area`. Relying on source order already caused one
@@ -57,12 +57,27 @@ Consequences to respect:
 - `.metrics` has `overflow-y: auto` as a safety valve for short windows. At 1080p it never
   engages.
 - Never set `display` inline on an element that also gets a `.hidden` class — inline styles
-  out-specify the class and the element refuses to hide. This has bitten twice.
+  out-specify the class and the element refuses to hide. This has bitten twice. The same trap
+  in a stylesheet: `.hidden` is declared early, so any later single-class rule setting
+  `display` beats it. `.sweeprange` and `.half` therefore carry explicit `.x.hidden` rules.
+- **`placeRangeRow` must not re-insert the range row when it is already in place.**
+  `insertAdjacentElement` re-inserts a node even when the position is unchanged, and
+  re-inserting blurs whatever inside it has focus. Since `compute()` runs on every keystroke,
+  that cost a focused range box its focus after every single digit.
 - The figure column holds **two** figures in one panel: cross-section above, sweep chart
-  below, split by a hairline on the second `h2` rather than a divider element. Both are
-  `flex: 1 1 0` so they take equal halves regardless of content; `flex-basis: auto` would let
-  contents decide and `height` in the stacked media query would lose to a `0` basis, which is
-  why that query resets `flex` to `0 0 auto`.
+  below, split by a hairline on the second heading row rather than a divider element. Each
+  figure travels with its own caption inside a `.half` at `flex: 1 1 0`, so the two take equal
+  halves regardless of content — a caption inside one `.half` and outside the other made the
+  drawing areas differ by a line of text. `flex-basis: auto` would let contents decide and
+  `height` in the stacked media query would lose to a `0` basis, which is why that query
+  resets `flex` to `0 0 auto`.
+- The sweep half is **collapsible and off by default** (the "Show" checkbox on the sweep
+  heading row). With it off the cross-section takes the whole panel. The toggle sits on that
+  heading rather than in the controls column: it governs the figure, and a 21rem column has no
+  width to spare. When off, the sweep radios are `disabled` — not hidden, so the field rows
+  don't reflow — and the range row and swept-field highlight are hidden. The swept parameter
+  and its range are still tracked while off, so switching back on restores the same chart
+  rather than a re-seeded one.
 - One panel, not two, so the vertical budget isn't spent twice on borders and padding.
 - The sweep radio shares a row with the **input**, not the label. Putting it in the label row
   cost enough width to truncate "b — bottom width, m" to an ellipsis; a 21rem column has room
@@ -170,9 +185,12 @@ near-critical band, no horizontal page scroll at mobile widths. For the sweep: `
 and a zero lower bound on `n` or `S₀` each show an explanation *in place of the chart* while
 the point results stay on screen; an invalid point input replaces the chart with a pointer to
 the results panel rather than an unexplained blank box; a mode switch re-seeds the range and
-moves the radio when the swept parameter becomes illegal; `z = 0` with `b` swept from zero
-leaves a one-sample gap rather than a `NaN`; the operating point falling outside the range is
-said so in the caption; a link with no `sweep`/`smin`/`smax` keys falls back to the default.
+moves the radio when the swept parameter becomes illegal, whether the sweep is shown or not;
+`z = 0` with `b` swept from zero leaves a one-sample gap rather than a `NaN`; the operating
+point falling outside the range is said so in the caption; typing several digits into a range
+box keeps focus throughout. Link handling: no `sweep`/`smin`/`smax` keys falls back to the
+default sweep; `swon` decides whether the chart is shown, and a link predating the toggle that
+names a sweep parameter or range asked for a chart, so it gets one.
 
 ## Open items
 

@@ -157,10 +157,17 @@
         cursor: pointer;
       }
 
+      /* The radios are inert until the sweep is switched on, so the column still reserves
+         their width and the fields don't reflow when it is. */
+      .sweeppick:disabled { cursor: default; opacity: 0.35; }
+
       .field.swept input[type="number"] { border-color: var(--accent); }
       .field.swept .sym { color: var(--accent); }
 
       /* Full-width row, moved in the DOM to sit under the row holding the swept field. */
+      /* Two classes, so the display: grid below can't out-specify .hidden. */
+      .sweeprange.hidden { display: none; }
+
       .sweeprange {
         grid-column: 1 / -1;
         display: grid;
@@ -210,13 +217,55 @@
       .figwrap { flex: 1 1 0; min-height: 0; position: relative; }
       .figwrap svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 
+      /* Two classes so the display: flex below can't out-specify .hidden. When the sweep is
+         off its half collapses and the cross-section takes the whole panel. */
+      .half.hidden { display: none; }
+
+      /* Each figure and its caption travel together in one flex: 1 1 0 box, so the two
+         halves stay equal — a caption inside one and outside the other would make the
+         drawing areas differ by a line of text. */
+      .half { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
+
       /* A hairline on the heading rather than a divider element — one panel, not two, so
-         the vertical budget isn't spent twice on borders and padding. */
+         the vertical budget isn't spent twice on borders and padding. The toggle lives on
+         this row rather than in the controls column: it governs the figure, and the 21rem
+         controls column has no width to spare. */
       .figure .subhead {
-        margin-top: 0.85rem;
+        flex: 0 0 auto;
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 0.6rem;
+        margin: 0.85rem 0 0.8rem;
         padding-top: 0.8rem;
         border-top: 1px solid var(--line);
       }
+
+      .figure .subhead h2 { margin: 0; }
+
+      .toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        font-size: 0.69rem;
+        font-weight: 600;
+        letter-spacing: 0.11em;
+        text-transform: uppercase;
+        color: var(--muted);
+        cursor: pointer;
+        user-select: none;
+      }
+
+      .toggle input {
+        width: 0.85rem;
+        height: 0.85rem;
+        margin: 0;
+        accent-color: var(--accent);
+        cursor: pointer;
+      }
+
+      .toggle:has(input:checked) { color: var(--accent); }
+      .toggle:focus-within { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 3px; }
 
       .figcap {
         flex: 0 0 auto;
@@ -324,6 +373,7 @@
         .titlebar { flex-direction: column; gap: 0.3rem; }
         /* flex must go back to auto or flex-basis 0 would beat the height. */
         .figwrap { flex: 0 0 auto; height: 46vw; min-height: 15rem; }
+        .half { flex: 0 0 auto; }
         .metrics { overflow: visible; }
       }
     </style>
@@ -404,7 +454,7 @@
           </div>
         </div>
 
-        <div class="sweeprange" id="sweeprange">
+        <div class="sweeprange hidden" id="sweeprange">
           <span class="srhead">Sweep range for <em class="sym" id="sweep-sym">Q</em></span>
           <span>from</span>
           <input type="number" id="in-smin" step="any" inputmode="decimal" aria-label="Sweep range minimum">
@@ -422,13 +472,24 @@
 
     <section class="panel figure">
       <h2>Cross-section</h2>
-      <div class="figwrap" id="diagram"></div>
-      <div class="figcap" id="figcap">Drawn to scale · dashed line is top of bank</div>
+      <div class="half">
+        <div class="figwrap" id="diagram"></div>
+        <div class="figcap" id="figcap">Drawn to scale · dashed line is top of bank</div>
+      </div>
 
-      <h2 class="subhead">Sensitivity sweep</h2>
-      <div id="chart-error" class="note err hidden"></div>
-      <div class="figwrap" id="chart"></div>
-      <div class="figcap" id="chartcap"></div>
+      <div class="subhead">
+        <h2>Sensitivity sweep</h2>
+        <label class="toggle">
+          <input type="checkbox" id="sweep-on">
+          Show
+        </label>
+      </div>
+
+      <div class="half hidden" id="sweepfig">
+        <div id="chart-error" class="note err hidden"></div>
+        <div class="figwrap" id="chart"></div>
+        <div class="figcap" id="chartcap"></div>
+      </div>
     </section>
 
     <section class="panel results">
@@ -876,6 +937,7 @@
       var chart = $("chart");
       var rangeRow = $("sweeprange");
       var sminEl = $("in-smin"), smaxEl = $("in-smax");
+      var sweepOn = $("sweep-on");
 
       var shape = null;   // last valid geometry, so a resize can redraw without recomputing
       var state = null;   // last valid inputs, so a resize can re-sample the sweep
@@ -904,7 +966,13 @@
         var idx = visible.indexOf($("row-" + p));
         if (idx < 0) return;
         var end = Math.min(visible.length - 1, Math.floor(idx / 2) * 2 + 1);
-        visible[end].insertAdjacentElement("afterend", rangeRow);
+        var anchor = visible[end];
+        // Bail out when it is already there. insertAdjacentElement re-inserts the node even
+        // if the position is unchanged, and re-inserting blurs whatever inside it has focus
+        // — which, since compute() runs on every keystroke, cost a focused range box its
+        // focus after each digit.
+        if (anchor.nextElementSibling === rangeRow) return;
+        anchor.insertAdjacentElement("afterend", rangeRow);
       }
 
       function setSweepParam(p, v, reseed) {
@@ -921,6 +989,20 @@
         placeRangeRow(p);
       }
 
+      // Off is the resting state: the sweep is a second question, and with it collapsed the
+      // cross-section takes the whole figure column. The swept parameter and its range are
+      // still tracked while off, so switching it back on restores the same chart rather
+      // than a re-seeded one.
+      function setSweepEnabled(on) {
+        $("sweepfig").classList.toggle("hidden", !on);
+        rangeRow.classList.toggle("hidden", !on);
+        sweepRadios.forEach(function (r) { r.disabled = !on; });
+        // Restated here rather than left to setSweepParam, which doesn't run on a plain
+        // toggle — the highlight has to come back when the sweep does.
+        Array.prototype.forEach.call(document.querySelectorAll(".fields .field"),
+          function (f) { f.classList.toggle("swept", on && f.id === "row-" + sweepParam); });
+      }
+
       function showError(messages) {
         $("error").innerHTML = messages.join("<br>");
         $("error").classList.remove("hidden");
@@ -930,8 +1012,10 @@
         diagram.innerHTML = "";
         // A sweep needs valid fixed inputs, so it goes too — but say so rather than
         // leaving an unexplained empty box where the chart was. The results panel carries
-        // the detail; this only needs to point at it.
-        showChartError(["Fix the channel inputs to see the sweep."]);
+        // the detail; this only needs to point at it. Nothing to explain when the sweep is
+        // switched off: there is no box to leave empty.
+        if (sweepOn.checked) showChartError(["Fix the channel inputs to see the sweep."]);
+        else clearChart();
       }
 
       function clearChart() {
@@ -991,9 +1075,12 @@
 
         // The swept parameter must be legal for the mode: switching modes swaps which of
         // Q and y is an input, and the hidden one cannot be swept.
+        // Kept current even while the sweep is off, so switching it on never lands on a
+        // parameter the mode has since made illegal.
         var allowed = sweepable(mode);
         if (allowed.indexOf(sweepParam) < 0) setSweepParam(allowed[0], v, true);
         else placeRangeRow(sweepParam);
+        setSweepEnabled(sweepOn.checked);
 
         var problems = validate(v, mode);
         if (problems.length) { showError(problems); return; }
@@ -1053,13 +1140,17 @@
 
         shape = { b: v.b, z: v.z, H: v.H, y: y };
 
-        var lo = parseFloat(sminEl.value), hi = parseFloat(smaxEl.value);
-        var rangeProblems = validateRange(sweepParam, lo, hi);
-        if (rangeProblems.length) {
-          showChartError(rangeProblems);
+        if (!sweepOn.checked) {
+          clearChart();   // state = null, so redraw() skips the sweep entirely
         } else {
-          clearChart();   // drops a stale range error and puts the chart back on screen
-          state = { param: sweepParam, lo: lo, hi: hi, v: v, mode: mode };
+          var lo = parseFloat(sminEl.value), hi = parseFloat(smaxEl.value);
+          var rangeProblems = validateRange(sweepParam, lo, hi);
+          if (rangeProblems.length) {
+            showChartError(rangeProblems);
+          } else {
+            clearChart();   // drops a stale range error and puts the chart back on screen
+            state = { param: sweepParam, lo: lo, hi: hi, v: v, mode: mode };
+          }
         }
 
         redraw();
@@ -1073,6 +1164,9 @@
         KEYS.forEach(function (k) { if (isFinite(v[k])) parts.push(k + "=" + v[k]); });
         // The sweep is part of the configuration: an explicit range exists so that a figure
         // is reproducible, which it would not be if the range lived only in the session.
+        // Whether it is shown is part of that too — a link should reproduce the page as
+        // sent, chart or no chart.
+        parts.push("swon=" + (sweepOn.checked ? "1" : "0"));
         parts.push("sweep=" + sweepParam);
         if (isFinite(parseFloat(sminEl.value))) parts.push("smin=" + sminEl.value);
         if (isFinite(parseFloat(smaxEl.value))) parts.push("smax=" + smaxEl.value);
@@ -1091,7 +1185,7 @@
           var val = decodeURIComponent(kv[1] || "");
           if (k === "mode") {
             modeRadios.forEach(function (r) { r.checked = (r.value === val); });
-          } else if (k === "sweep" || k === "smin" || k === "smax") {
+          } else if (k === "sweep" || k === "smin" || k === "smax" || k === "swon") {
             h[k] = val;
           } else if (inputs[k] && isFinite(parseFloat(val))) {
             inputs[k].value = val;
@@ -1101,13 +1195,18 @@
       }
 
       // A link without sweep keys — every link shared before this feature existed — falls
-      // back to the default sweep rather than to a blank chart.
+      // back to the default sweep rather than to a blank chart. A link that names a sweep
+      // parameter or range but predates the toggle asked for a chart, so it gets one; only
+      // an explicit swon=0 or no sweep keys at all leaves it collapsed.
       function init() {
         var h = readHash();
         var v = readInputs();
         var allowed = sweepable(currentMode());
         var p = h.sweep && allowed.indexOf(h.sweep) >= 0 ? h.sweep : allowed[0];
         var haveRange = isFinite(parseFloat(h.smin)) && isFinite(parseFloat(h.smax));
+        sweepOn.checked = h.swon !== undefined
+          ? h.swon === "1"
+          : Boolean(h.sweep || haveRange);
         setSweepParam(p, v, !haveRange);
         if (haveRange) { sminEl.value = h.smin; smaxEl.value = h.smax; }
         compute();
@@ -1116,6 +1215,7 @@
       KEYS.forEach(function (k) { inputs[k].addEventListener("input", compute); });
       [sminEl, smaxEl].forEach(function (e) { e.addEventListener("input", compute); });
       modeRadios.forEach(function (r) { r.addEventListener("change", compute); });
+      sweepOn.addEventListener("change", compute);
       sweepRadios.forEach(function (r) {
         r.addEventListener("change", function () {
           setSweepParam(r.value, readInputs(), true);
