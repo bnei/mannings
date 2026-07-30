@@ -10,8 +10,8 @@ and `what-utm`.
 **One file, no build, no dependencies.** Everything — markup, CSS, JS — lives in
 `index.html`. This is deliberate, not laziness:
 
-- Deploys to Cloudflare Pages as a direct upload with no build command. Every request is a
-  static asset, so nothing touches the metered Workers/Functions quota.
+- Deployed on Cloudflare Pages with no build command. Every request is a static asset, so
+  nothing touches the metered Workers/Functions quota.
 - Runs from `file://` and offline, which matters for a calculation that may need to be
   reproducible years later.
 - Auditable in one screen, which matters for a number that ends up in a report.
@@ -194,10 +194,6 @@ names a sweep parameter or range asked for a chart, so it gets one.
 
 ## Open items
 
-- No remote deployment yet. Needs a Cloudflare Pages project (no build command, output =
-  repo root) bound to `mannings.briannei.com`. Note `.claude/launch.json` now exists in the
-  repo — if output is the repo root, either exclude `.claude/` from the upload or accept that
-  a dev-tooling file gets published.
 - The `briannei-site` landing page does not yet have a card for this tool.
 - The sweep is static by design: no hover readout, no click-to-set-the-operating-point. Both
   were considered and deferred so that a screenshot is the complete figure and there is no

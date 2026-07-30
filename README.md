@@ -22,8 +22,10 @@ Open `index.html`. That's it — no build step, no dependencies, no server. It w
 
 ## Deploying
 
-Static site on Cloudflare Pages. Every request is a static asset, so there are no Functions
-invocations and nothing metered.
+Live on Cloudflare Pages at [mannings.briannei.com](https://mannings.briannei.com), connected
+to this repo — a push to `main` redeploys. No build command, output directory is the repo
+root. Every request is a static asset, so there are no Functions invocations and nothing
+metered.
 
 ## Method
 

@@ -449,7 +449,7 @@
         <div class="field" id="row-S">
           <label for="in-S"><span class="sym">S₀</span> — bed slope, m/m</label>
           <div class="fctl">
-            <input type="number" id="in-S" value="0.002" step="any" inputmode="decimal">
+            <input type="number" id="in-S" value="0.01" step="any" inputmode="decimal">
             <input type="radio" class="sweeppick" name="sweep" value="S" aria-label="Sweep bed slope">
           </div>
         </div>
@@ -654,7 +654,7 @@
           case "b": return [0, v.b > 0 && isFinite(v.b) ? Math.max(5, 2 * v.b) : 5];
           case "z": return [0, 4];
           case "n": return [0.01, 0.1];
-          case "S": return [0.0005, 0.01];
+          case "S": return [0.005, 0.1];
         }
         return [0, 1];
       }
