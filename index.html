@@ -539,7 +539,7 @@
     </section>
 
     <div class="methodbar">
-      <p><code>Q = (1/n)·A·R^(2/3)·√S₀</code> · normal depth by bisection on a strictly increasing <code>Q(y)</code> · prismatic channel, uniform flow · <strong>User is responsible for verifying outputs.</strong></p>
+      <p><code>Q = (1/n)·A·R^(2/3)·√S₀</code> · normal depth by bracketing <code>Q(y)</code> and bisection · prismatic channel, uniform flow · <strong>User is responsible for verifying outputs.</strong></p>
       <p><a href="https://briannei.com/">briannei.com</a></p>
     </div>
 
@@ -551,44 +551,85 @@
       var G = 9.80665;      // m/s^2
       var Y_MAX = 1e6;      // m, bracketing guard so a pathological input can't spin forever
 
-      // Symmetric trapezoid: bottom width b, side slope z (H:V), flow depth y. All metres.
-      function section(b, z, y) {
-        var A = y * (b + z * y);
-        var P = b + 2 * y * Math.sqrt(1 + z * z);
-        var T = b + 2 * z * y;
+      // Depth samples used to bracket normal-depth roots. A correctness parameter, not a
+      // performance knob: a pair of roots closer together than one grid cell is missed
+      // silently. See docs/adr/0003.
+      var GRID = 200;
+
+      // Manning's equation, SI (k = 1.0). Everything in the solver that is not geometry.
+      function manning(A, R, n, S) {
+        return (1 / n) * A * Math.pow(R, 2 / 3) * Math.sqrt(S);
+      }
+
+      // Section properties at one depth. A section type supplies A, P and T; R and hydraulic
+      // depth are the same derivation whatever the geometry, so they are computed once here
+      // rather than in every section type.
+      function sectionProps(sec, v, y) {
+        var g = sec.math.props(v, y);
         return {
-          A: A,
-          P: P,
-          T: T,
-          R: P > 0 ? A / P : 0,
-          D: T > 0 ? A / T : 0   // hydraulic depth, used for Froude
+          A: g.A,
+          P: g.P,
+          T: g.T,
+          R: g.P > 0 ? g.A / g.P : 0,
+          D: g.T > 0 ? g.A / g.T : 0   // hydraulic depth, used for Froude
         };
       }
 
-      // Manning's equation, SI (k = 1.0).
-      function discharge(b, z, y, n, S) {
+      function discharge(sec, v, y) {
         if (y <= 0) return 0;
-        var s = section(b, z, y);
+        var s = sectionProps(sec, v, y);
         if (s.A <= 0 || s.R <= 0) return 0;
-        return (1 / n) * s.A * Math.pow(s.R, 2 / 3) * Math.sqrt(S);
+        return manning(s.A, s.R, v.n, v.S);
       }
 
-      // Normal depth for a target discharge. Q(y) is strictly increasing for a trapezoid
-      // (both A and R grow with y), so a sign change brackets a unique root and bisection
-      // cannot diverge. Chosen over Newton deliberately: no derivative, no failure mode,
-      // and the iteration cost is irrelevant here.
-      function normalDepth(b, z, Q, n, S) {
-        var hi = 1;
-        while (hi < Y_MAX && discharge(b, z, hi, n, S) < Q) hi *= 2;
-        if (discharge(b, z, hi, n, S) < Q) return null;   // beyond any plausible geometry
-
-        var lo = 0;
+      // Refine one bracket. The interval is known to contain a sign change, so the midpoint
+      // rule cannot leave it and the width halves every step. Bisection rather than Newton,
+      // as before: no derivative to get wrong and no way to diverge.
+      function bisect(f, lo, hi, flo) {
+        var negLo = flo < 0;
         for (var i = 0; i < 200; i++) {
           var mid = (lo + hi) / 2;
-          if (discharge(b, z, mid, n, S) < Q) lo = mid; else hi = mid;
+          if ((f(mid) < 0) === negLo) lo = mid; else hi = mid;
           if (hi - lo <= 1e-12 * Math.max(1, hi)) break;
         }
         return (lo + hi) / 2;
+      }
+
+      // Every normal depth for a target discharge, shallowest first. No monotonicity
+      // assumption: Q(y) rises strictly with depth for a trapezoid, but a circular section's
+      // conveyance peaks below the crown and a compound section's drops discontinuously at a
+      // bench. One code path for all of them — sample Q(y) - Q across the depth range, bisect
+      // every sign change, report what is there. See docs/adr/0003.
+      function normalDepths(sec, v, Q) {
+        var ceiling = sec.math.depthLimit(v);
+        if (!isFinite(ceiling)) {
+          // Open section, so the range has no top of its own. Double until the discharge
+          // reaches the target: the grid then spans the root instead of spanning a range
+          // across which its spacing would be meaningless.
+          ceiling = 1;
+          while (ceiling < Y_MAX && discharge(sec, v, ceiling) < Q) ceiling *= 2;
+        }
+        if (!(ceiling > 0)) return [];
+
+        function f(y) { return discharge(sec, v, y) - Q; }
+
+        var roots = [];
+        var prevY = 0, prevF = f(0);
+        for (var i = 1; i <= GRID; i++) {
+          var y = ceiling * (i / GRID);
+          var fy = f(y);
+          if ((prevF < 0) !== (fy < 0)) roots.push(bisect(f, prevY, y, prevF));
+          prevY = y;
+          prevF = fy;
+        }
+        return roots;
+      }
+
+      // The shallowest normal depth, or null when the channel conveys less than the target at
+      // every depth. Callers that need to know whether others exist call normalDepths.
+      function normalDepth(sec, v, Q) {
+        var r = normalDepths(sec, v, Q);
+        return r.length ? r[0] : null;
       }
 
       // The band around unity is reported as near-critical rather than pinned to Fr = 1.000
@@ -609,22 +650,182 @@
         return String(Number(v.toPrecision(4)));
       }
 
-      // Returns an array of human-readable problems, empty if the inputs are usable.
-      function validate(v, mode) {
-        var e = [];
-        var required = ["b", "z", "H", "n", "S"].concat(mode === "depth" ? ["Q"] : ["y"]);
-        for (var i = 0; i < required.length; i++) {
-          if (!isFinite(v[required[i]])) return ["Fill in every field to see results."];
+      // ---- Parameters ----
+      //
+      // Every input is declared exactly once — here if it is common to all section types, in
+      // the section type's own list if it is geometry. The declaration carries everything the
+      // generic layers need: the label the input field and the sweep axis share (they are the
+      // same fact and must not drift), the domain that validates it, and the range the sweep
+      // seeds when it becomes the swept parameter. Nothing below reads a hardcoded list of
+      // parameter names.
+      //
+      // Three domains, and the third is not redundant: Q = 0 and y = 0 are rejected as point
+      // inputs, because a channel with no water is not a result anyone asked for, but are
+      // well defined as sweep range endpoints — y = 0 is the natural left edge of a rating
+      // curve. `positiveAsPoint` is what makes validate and validateRange near-siblings by
+      // declaration rather than by two lists kept in step by hand. The three are `positive`,
+      // `nonNegative` and `positiveAsPoint`.
+
+      var P_Q = {
+        key: "Q", sym: "Q", desc: "discharge, m³/s", name: "Discharge",
+        domain: "positiveAsPoint", sweep: true,
+        seed: function (v) { return [0, v.Q > 0 && isFinite(v.Q) ? 2 * v.Q : 10]; }
+      };
+
+      var P_y = {
+        key: "y", sym: "y", desc: "flow depth, m", name: "Flow depth",
+        domain: "positiveAsPoint", sweep: true,
+        // Seeded from the containing dimension rather than from H, so a closed section seeds
+        // from its crown without this needing to know which is which.
+        seed: function (v, sec) {
+          var c = sec.math.containing(v);
+          return [0, c > 0 && isFinite(c) ? c : 2];
         }
-        if (v.n <= 0) e.push("Manning's n must be greater than zero.");
-        if (v.S <= 0) e.push("Bed slope must be greater than zero — Manning's equation is undefined for a flat or adverse bed, where normal depth would be infinite.");
-        if (v.b < 0) e.push("Bottom width cannot be negative.");
-        if (v.z < 0) e.push("Side slope cannot be negative.");
-        if (v.b === 0 && v.z === 0) e.push("A channel needs either a bottom width or a side slope — both zero leaves no cross-section.");
-        if (v.H <= 0) e.push("Channel height must be greater than zero.");
-        if (mode === "depth" && v.Q <= 0) e.push("Discharge must be greater than zero.");
-        if (mode === "flow" && v.y <= 0) e.push("Flow depth must be greater than zero.");
-        return e;
+      };
+
+      var P_n = {
+        key: "n", sym: "n", desc: "Manning's n", name: "Manning's n",
+        domain: "positive", sweep: true,
+        seed: function () { return [0.01, 0.1]; }
+      };
+
+      var P_S = {
+        key: "S", sym: "S₀", desc: "bed slope, m/m", name: "Bed slope",
+        domain: "positive", sweep: true,
+        // The generated sentence is right for n and too thin for S₀, where the reason is the
+        // equation itself rather than a convention.
+        msg: {
+          point: "Bed slope must be greater than zero — Manning's equation is undefined for a flat or adverse bed, where normal depth would be infinite.",
+          range: "Bed slope must be greater than zero — Manning's equation is undefined for a flat or adverse bed, so the sweep cannot start at zero."
+        },
+        seed: function () { return [0.005, 0.1]; }
+      };
+
+      // Flow parameters first, geometry in the middle, roughness and slope last — the field
+      // order on screen and the order errors are reported in.
+      function paramList(sec) {
+        return [P_Q, P_y].concat(sec.math.params, [P_n, P_S]);
+      }
+
+      // The mode fixes one of Q and y and solves for the other, so the one being solved for
+      // is not an input: it is neither validated, nor swept, nor shown.
+      function activeParams(sec, mode) {
+        var solved = mode === "depth" ? "y" : "Q";
+        return paramList(sec).filter(function (p) { return p.key !== solved; });
+      }
+
+      function paramKeys(sec) {
+        return paramList(sec).map(function (p) { return p.key; });
+      }
+
+      function findParam(sec, key) {
+        var ps = paramList(sec);
+        for (var i = 0; i < ps.length; i++) {
+          if (ps[i].key === key) return ps[i];
+        }
+        return null;
+      }
+
+      // The label a field and a sweep axis both carry.
+      function paramLabel(p) { return p.sym + " — " + p.desc; }
+
+      // ---- Section types ----
+      //
+      // One registry entry per section type, in two namespaced halves. `math` is hydraulics
+      // and geometry; `view` is everything about presenting them. The hydraulics never read
+      // `.view` — only the drawing and UI layers do — which makes the rule greppable rather
+      // than a matter of discipline. A single registry rather than two tables keyed by
+      // section type, because two tables drift.
+      var SECTIONS = {
+        trapezoid: {
+          id: "trapezoid",
+          math: {
+            params: [
+              {
+                key: "b", sym: "b", desc: "bottom width, m", name: "Bottom width",
+                domain: "nonNegative", sweep: true,
+                seed: function (v) { return [0, v.b > 0 && isFinite(v.b) ? Math.max(5, 2 * v.b) : 5]; }
+              },
+              {
+                key: "z", sym: "z", desc: "side slope, H:V", name: "Side slope",
+                domain: "nonNegative", sweep: true,
+                seed: function () { return [0, 4]; }
+              },
+              {
+                // Not sweepable: H appears in neither Q(y) nor normalDepth(Q), so sweeping it
+                // would draw a flat line.
+                key: "H", sym: "H", desc: "channel height, m", name: "Channel height",
+                domain: "positive", sweep: false
+              }
+            ],
+
+            // Open section: the flow area grows without bound, so there is no depth at which
+            // the geometry runs out and the containing dimension is the height given.
+            depthLimit: function () { return Infinity; },
+            containing: function (v) { return v.H; },
+
+            // Symmetric trapezoid: bottom width b, side slope z (H:V), flow depth y. Metres.
+            props: function (v, y) {
+              return {
+                A: y * (v.b + v.z * y),
+                P: v.b + 2 * y * Math.sqrt(1 + v.z * v.z),
+                T: v.b + 2 * v.z * y
+              };
+            },
+
+            // Cross-parameter rules only. Anything expressible as a domain on one parameter
+            // is declared above instead, so it cannot be stated twice and disagree.
+            validate: function (v) {
+              return v.b === 0 && v.z === 0
+                ? ["A channel needs either a bottom width or a side slope — both zero leaves no cross-section."]
+                : [];
+            },
+
+            // The boundary as a polyline in world coordinates — x across, y up from the
+            // invert — ordered left rim, invert, right rim, and cut off at elevation d. For
+            // drawing only: section properties are always analytic and never derived from
+            // this. The two coincide for a trapezoid and must not for a curved boundary,
+            // where a polygon's area and especially its perimeter are approximations.
+            outline: function (v, d) {
+              return [
+                [-(v.b / 2) - v.z * d, d],
+                [-(v.b / 2), 0],
+                [v.b / 2, 0],
+                [(v.b / 2) + v.z * d, d]
+              ];
+            }
+          },
+          view: {
+            name: "trapezoidal channel",
+            aria: "Trapezoidal channel cross-section",
+            invertLabel: function (v) { return "b = " + fmt(v.b) + " m"; }
+          }
+        }
+      };
+
+      // One parameter against its declared domain, as a point input.
+      function domainProblem(p, v) {
+        var x = v[p.key];
+        if (p.domain === "nonNegative") {
+          if (x < 0) return (p.msg && p.msg.point) || p.name + " cannot be negative.";
+          return null;
+        }
+        if (x <= 0) return (p.msg && p.msg.point) || p.name + " must be greater than zero.";
+        return null;
+      }
+
+      // Returns an array of human-readable problems, empty if the inputs are usable.
+      function validate(sec, v, mode) {
+        var e = [];
+        var ps = activeParams(sec, mode);
+        for (var i = 0; i < ps.length; i++) {
+          if (!isFinite(v[ps[i].key])) return ["Fill in every field to see results."];
+        }
+        ps.forEach(function (p) {
+          var m = domainProblem(p, v);
+          if (m) e.push(m);
+        });
+        return e.concat(sec.math.validate(v));
       }
 
       // ---- Sensitivity sweep ----
@@ -638,55 +839,60 @@
       // from both lists: it appears in neither Q(y) nor normalDepth(Q), so sweeping it
       // would draw a flat line. The mode's own fixed input is sweepable — that sweep is the
       // rating curve, which is why it is the default.
-      function sweepable(mode) {
-        return (mode === "depth" ? ["Q"] : ["y"]).concat(["b", "z", "n", "S"]);
+      function sweepable(sec, mode) {
+        return activeParams(sec, mode)
+          .filter(function (p) { return p.sweep; })
+          .map(function (p) { return p.key; });
       }
 
-      // Seeded range for a parameter. Re-seeded whenever the swept parameter changes,
-      // because the old numbers are meaningless in the new units — n lives in 0.01–0.1
-      // while b lives in metres. Deliberately NOT re-seeded when the other inputs change,
-      // so the axis stays put while the channel is edited and two screenshots stay
+      // Seeded range for a parameter, from its own declaration. Re-seeded whenever the swept
+      // parameter changes, because the old numbers are meaningless in the new units — n lives
+      // in 0.01–0.1 while b lives in metres. Deliberately NOT re-seeded when the other inputs
+      // change, so the axis stays put while the channel is edited and two screenshots stay
       // comparable.
-      function sweepRange(param, v) {
-        switch (param) {
-          case "Q": return [0, v.Q > 0 && isFinite(v.Q) ? 2 * v.Q : 10];
-          case "y": return [0, v.H > 0 && isFinite(v.H) ? v.H : 2];
-          case "b": return [0, v.b > 0 && isFinite(v.b) ? Math.max(5, 2 * v.b) : 5];
-          case "z": return [0, 4];
-          case "n": return [0.01, 0.1];
-          case "S": return [0.005, 0.1];
-        }
-        return [0, 1];
+      function sweepRange(sec, param, v) {
+        var p = findParam(sec, param);
+        return p && p.seed ? p.seed(v, sec) : [0, 1];
       }
 
-      // A near-sibling of validate(), NOT a clone — do not "fix" it to match.
-      // As a range endpoint, Q = 0 and y = 0 are well defined: both give exactly zero, and
-      // y = 0 is the natural left edge of a rating curve. As a point input they are
-      // rejected, because a channel with no water is not a result anyone asked for.
-      function validateRange(param, lo, hi) {
+      // A near-sibling of validate(), NOT a clone — do not "fix" it to match. As a range
+      // endpoint, Q = 0 and y = 0 are well defined: both give exactly zero, and y = 0 is the
+      // natural left edge of a rating curve. As a point input they are rejected, because a
+      // channel with no water is not a result anyone asked for. That is the whole of the
+      // difference, and it is carried by the `positiveAsPoint` domain rather than restated.
+      function validateRange(sec, param, lo, hi) {
         var e = [];
         if (!isFinite(lo) || !isFinite(hi)) return ["Fill in the sweep range to see the curve."];
         if (hi <= lo) e.push("The sweep needs a maximum greater than its minimum.");
         if (lo < 0) e.push("The sweep cannot start below zero.");
-        if (param === "n" && lo <= 0) e.push("Manning's n must be greater than zero, so the sweep cannot start at zero.");
-        if (param === "S" && lo <= 0) e.push("Bed slope must be greater than zero — Manning's equation is undefined for a flat or adverse bed, so the sweep cannot start at zero.");
+        var p = findParam(sec, param);
+        if (p && p.domain === "positive" && lo <= 0) {
+          e.push((p.msg && p.msg.range) ||
+                 p.name + " must be greater than zero, so the sweep cannot start at zero.");
+        }
         return e;
       }
 
       // One sample: substitute x for the swept parameter and solve. The overtopping
       // threshold comes from the same call as the response so the two cannot disagree.
-      // In depth mode the threshold is H, a constant. In flow mode it is capacity, which
-      // varies with b, z, n and S — a curve, not a line.
-      function sweepPoint(param, x, v, mode) {
-        var w = { Q: v.Q, y: v.y, b: v.b, z: v.z, H: v.H, n: v.n, S: v.S };
+      // In depth mode the threshold is the containing dimension, constant unless it is itself
+      // the swept parameter. In flow mode it is capacity, which varies with the geometry, n
+      // and S — a curve, not a line.
+      function sweepPoint(sec, param, x, v, mode) {
+        // Copy every key rather than rebuilding a fixed set. The literal that used to sit
+        // here silently dropped any key it did not name, so a geometry parameter belonging to
+        // a section type this function has never heard of would vanish from the working copy
+        // and the sweep would quietly solve a different channel.
+        var w = {};
+        Object.keys(v).forEach(function (k) { w[k] = v[k]; });
         w[param] = x;
         var response, threshold;
         if (mode === "depth") {
-          response = normalDepth(w.b, w.z, w.Q, w.n, w.S);
-          threshold = w.H;
+          response = normalDepth(sec, w, w.Q);
+          threshold = sec.math.containing(w);
         } else {
-          response = discharge(w.b, w.z, w.y, w.n, w.S);
-          threshold = discharge(w.b, w.z, w.H, w.n, w.S);
+          response = discharge(sec, w, w.y);
+          threshold = discharge(sec, w, sec.math.containing(w));
         }
         return {
           x: x,
@@ -697,13 +903,13 @@
         };
       }
 
-      function sweep(param, lo, hi, v, mode, count) {
+      function sweep(sec, param, lo, hi, v, mode, count) {
         var n = Math.max(2, count | 0);
         var samples = [];
         for (var i = 0; i < n; i++) {
-          samples.push(sweepPoint(param, lo + (hi - lo) * (i / (n - 1)), v, mode));
+          samples.push(sweepPoint(sec, param, lo + (hi - lo) * (i / (n - 1)), v, mode));
         }
-        var op = sweepPoint(param, v[param], v, mode);
+        var op = sweepPoint(sec, param, v[param], v, mode);
         op.inRange = v[param] >= lo && v[param] <= hi;
         return { param: param, lo: lo, hi: hi, mode: mode, samples: samples, operating: op };
       }
@@ -714,53 +920,65 @@
       // fixed aspect ratio, so the section fills the space it is given instead of being
       // letterboxed by preserveAspectRatio. One user unit = one CSS pixel, which also keeps
       // stroke widths and label sizes consistent at any panel size.
-      function drawSection(b, z, H, y, W, Hpx) {
+      function drawSection(sec, v, y, W, Hpx) {
         // Side padding leaves room for the y and freeboard labels, which sit outside the
         // channel walls. Scaled down on narrow panels so the shape keeps priority there.
         var padX = Math.min(84, Math.max(26, W * 0.09));
         var padTop = 30, padBottom = 40;
         if (!(W > padX * 2 + 20) || !(Hpx > padTop + padBottom + 20)) return "";
 
+        var H = sec.math.containing(v);
         var yTop = Math.max(H, y);
-        var worldW = b + 2 * z * yTop;
+        var full = sec.math.outline(v, yTop);
+
+        // Extent measured from the outline rather than from a width formula: the widest point
+        // of a section is not necessarily at its top. Nothing here is a section property —
+        // this is the drawing's bounding box, used only to fit the shape to the panel.
+        var minX = Infinity, maxX = -Infinity, i;
+        for (i = 0; i < full.length; i++) {
+          if (full[i][0] < minX) minX = full[i][0];
+          if (full[i][0] > maxX) maxX = full[i][0];
+        }
+        var worldW = maxX - minX;
         var worldH = yTop;
         if (!(worldW > 0) || !(worldH > 0)) return "";
 
+        // Never vertically exaggerated: one scale for both axes, so the side slopes read as
+        // they are. A wide shallow channel leaving whitespace in a tall panel is geometry.
         var s = Math.min((W - 2 * padX) / worldW, (Hpx - padTop - padBottom) / worldH);
-        var cx = W / 2;
+        var cx = W / 2 - (minX + maxX) / 2 * s;
         var base = Hpx - padBottom - (Hpx - padTop - padBottom - worldH * s) / 2;
 
         function X(a) { return (cx + a * s).toFixed(1); }
         function Y(a) { return (base - a * s).toFixed(1); }
 
-        function pts(d) {
-          return [
-            [-(b / 2) - z * d, d],
-            [-(b / 2), 0],
-            [b / 2, 0],
-            [(b / 2) + z * d, d]
-          ].map(function (p) { return X(p[0]) + "," + Y(p[1]); }).join(" ");
+        function pts(o) {
+          return o.map(function (p) { return X(p[0]) + "," + Y(p[1]); }).join(" ");
         }
 
+        var wet = sec.math.outline(v, y);
         var over = y > H;
         var o = [];
 
-        // Water first so the channel outline draws over it.
+        // Water first so the channel outline draws over it. The surface closes the polygon,
+        // so it is drawn from the first and last points of the wetted boundary rather than
+        // from a top-width formula.
         if (y > 0) {
-          o.push('<polygon points="' + pts(y) + '" fill="var(--water)" fill-opacity="0.5"/>');
-          o.push('<line x1="' + X(-(b / 2) - z * y) + '" y1="' + Y(y) +
-                 '" x2="' + X((b / 2) + z * y) + '" y2="' + Y(y) +
+          o.push('<polygon points="' + pts(wet) + '" fill="var(--water)" fill-opacity="0.5"/>');
+          o.push('<line x1="' + X(wet[0][0]) + '" y1="' + Y(y) +
+                 '" x2="' + X(wet[wet.length - 1][0]) + '" y2="' + Y(y) +
                  '" stroke="var(--water)" stroke-width="2.5"/>');
         }
 
-        o.push('<polyline points="' + pts(H) + '" fill="none" stroke="var(--fg)" ' +
+        var bank = sec.math.outline(v, H);
+        o.push('<polyline points="' + pts(bank) + '" fill="none" stroke="var(--fg)" ' +
                'stroke-width="2.5" stroke-linejoin="round"/>');
 
         // Mark the top of bank only when the water surface is elsewhere, so overtopping
         // reads unambiguously instead of being clipped away.
         if (Math.abs(y - H) > 1e-9) {
-          o.push('<line x1="' + X(-(b / 2) - z * H) + '" y1="' + Y(H) +
-                 '" x2="' + X((b / 2) + z * H) + '" y2="' + Y(H) +
+          o.push('<line x1="' + X(bank[0][0]) + '" y1="' + Y(H) +
+                 '" x2="' + X(bank[bank.length - 1][0]) + '" y2="' + Y(H) +
                  '" stroke="' + (over ? "var(--err)" : "var(--line)") +
                  '" stroke-width="1.5" stroke-dasharray="5 4"/>');
         }
@@ -768,39 +986,28 @@
         var lab = 'font-size="12.5" font-family="ui-sans-serif, system-ui, sans-serif"';
 
         o.push('<text x="' + X(0) + '" y="' + (base + 22) + '" fill="var(--muted)" ' + lab +
-               ' text-anchor="middle">b = ' + fmt(b) + ' m</text>');
+               ' text-anchor="middle">' + sec.view.invertLabel(v) + '</text>');
 
         if (y > 0) {
-          o.push('<text x="' + X((b / 2) + z * y) + '" y="' + (parseFloat(Y(y)) - 9).toFixed(1) +
+          o.push('<text x="' + X(wet[wet.length - 1][0]) + '" y="' + (parseFloat(Y(y)) - 9).toFixed(1) +
                  '" fill="' + (over ? "var(--err)" : "var(--water)") + '" ' + lab +
-                 ' text-anchor="end">T = ' + fmt(b + 2 * z * y) + ' m</text>');
-          o.push('<text x="' + (parseFloat(X(-(b / 2) - z * y)) - 8).toFixed(1) + '" y="' + Y(y / 2) +
+                 ' text-anchor="end">T = ' + fmt(sectionProps(sec, v, y).T) + ' m</text>');
+          o.push('<text x="' + (parseFloat(X(wet[0][0])) - 8).toFixed(1) + '" y="' + Y(y / 2) +
                  '" fill="' + (over ? "var(--err)" : "var(--muted)") + '" ' + lab +
                  ' text-anchor="end" dominant-baseline="middle">y = ' + fmt(y) + ' m</text>');
         }
 
         if (!over && H - y > 1e-9) {
-          o.push('<text x="' + (parseFloat(X((b / 2) + z * H)) + 8).toFixed(1) + '" y="' + Y((H + y) / 2) +
+          o.push('<text x="' + (parseFloat(X(bank[bank.length - 1][0])) + 8).toFixed(1) + '" y="' + Y((H + y) / 2) +
                  '" fill="var(--muted)" ' + lab + ' dominant-baseline="middle">' +
                  fmt(H - y) + ' m</text>');
         }
 
         return '<svg viewBox="0 0 ' + W.toFixed(0) + ' ' + Hpx.toFixed(0) + '" role="img" ' +
-               'aria-label="Trapezoidal channel cross-section">' + o.join("") + '</svg>';
+               'aria-label="' + sec.view.aria + '">' + o.join("") + '</svg>';
       }
 
       // ---- Sweep chart drawing ----
-
-      // Axis labels are kept here, next to the drawing that uses them, but they must match
-      // the field labels in the markup — the symbol and the unit are the same fact.
-      var AXIS = {
-        Q: "Q — discharge, m³/s",
-        y: "y — flow depth, m",
-        b: "b — bottom width, m",
-        z: "z — side slope, H:V",
-        n: "n — Manning's n",
-        S: "S₀ — bed slope, m/m"
-      };
 
       function niceStep(span, target) {
         var raw = span / Math.max(1, target);
@@ -823,7 +1030,7 @@
       // Linear axes only. A log x-axis would read better for S₀, but it cannot represent
       // zero, and b = 0 (triangular) and z = 0 (rectangular) are legal sections that must
       // stay sweepable. Don't "improve" this.
-      function drawSweep(res, W, Hpx) {
+      function drawSweep(sec, res, W, Hpx) {
         var padL = 62, padR = 18, padT = 18, padB = 44;
         if (!(W > padL + padR + 60) || !(Hpx > padT + padB + 50)) return "";
 
@@ -907,21 +1114,28 @@
                  'fill="var(--accent)"/>');
         }
 
+        // The x-axis label is the swept parameter's own declared label — the same string the
+        // input field carries, because the symbol and the unit are the same fact.
+        var xTitle = paramLabel(findParam(sec, res.param));
         var yTitle = res.mode === "depth" ? "Normal depth, m" : "Discharge, m³/s";
         o.push('<text x="' + (padL + plotW / 2) + '" y="' + (padT + plotH + 36) + '" ' + lab +
-               ' text-anchor="middle">' + AXIS[res.param] + '</text>');
+               ' text-anchor="middle">' + xTitle + '</text>');
         o.push('<text transform="rotate(-90 14 ' + (padT + plotH / 2) + ')" x="14" y="' +
                (padT + plotH / 2) + '" ' + lab +
                ' text-anchor="middle" dominant-baseline="middle">' + yTitle + '</text>');
 
         return '<svg viewBox="0 0 ' + W.toFixed(0) + ' ' + Hpx.toFixed(0) + '" role="img" ' +
-               'aria-label="' + yTitle + ' against ' + AXIS[res.param] + '">' +
+               'aria-label="' + yTitle + ' against ' + xTitle + '">' +
                o.join("") + '</svg>';
       }
 
       // ---- UI ----
 
-      var KEYS = ["Q", "y", "b", "z", "H", "n", "S"];
+      // The one section type that ships so far. Step 5 makes this a selection; until then the
+      // markup below is the trapezoid's fields, statically.
+      var sec = SECTIONS.trapezoid;
+
+      var KEYS = paramKeys(sec);
       var inputs = {};
       KEYS.forEach(function (k) { inputs[k] = document.getElementById("in-" + k); });
 
@@ -978,11 +1192,11 @@
       function setSweepParam(p, v, reseed) {
         sweepParam = p;
         sweepRadios.forEach(function (r) { r.checked = (r.value === p); });
-        $("sweep-sym").textContent = p === "S" ? "S₀" : p;
+        $("sweep-sym").textContent = findParam(sec, p).sym;
         Array.prototype.forEach.call(document.querySelectorAll(".fields .field"),
           function (f) { f.classList.toggle("swept", f.id === "row-" + p); });
         if (reseed) {
-          var rg = sweepRange(p, v);
+          var rg = sweepRange(sec, p, v);
           sminEl.value = rg[0];
           smaxEl.value = rg[1];
         }
@@ -1053,15 +1267,15 @@
         var r = chart.getBoundingClientRect();
         if (!(r.width > 0)) return;
         var count = Math.max(24, Math.min(400, Math.round(r.width / 4)));
-        var res = sweep(state.param, state.lo, state.hi, state.v, state.mode, count);
-        chart.innerHTML = drawSweep(res, r.width, r.height);
+        var res = sweep(sec, state.param, state.lo, state.hi, state.v, state.mode, count);
+        chart.innerHTML = drawSweep(sec, res, r.width, r.height);
         $("chartcap").textContent = caption(res);
       }
 
       function redraw() {
         if (shape) {
           var r = diagram.getBoundingClientRect();
-          diagram.innerHTML = drawSection(shape.b, shape.z, shape.H, shape.y, r.width, r.height);
+          diagram.innerHTML = drawSection(sec, shape.v, shape.y, r.width, r.height);
         }
         if (state) drawCurve();
       }
@@ -1077,34 +1291,36 @@
         // Q and y is an input, and the hidden one cannot be swept.
         // Kept current even while the sweep is off, so switching it on never lands on a
         // parameter the mode has since made illegal.
-        var allowed = sweepable(mode);
+        var allowed = sweepable(sec, mode);
         if (allowed.indexOf(sweepParam) < 0) setSweepParam(allowed[0], v, true);
         else placeRangeRow(sweepParam);
         setSweepEnabled(sweepOn.checked);
 
-        var problems = validate(v, mode);
+        var problems = validate(sec, v, mode);
         if (problems.length) { showError(problems); return; }
 
         $("error").classList.add("hidden");
         $("results-body").classList.remove("hidden");
 
-        var y, Q;
+        var y, Q, roots = [];
         if (mode === "depth") {
           Q = v.Q;
-          y = normalDepth(v.b, v.z, Q, v.n, v.S);
-          if (y === null) {
+          roots = normalDepths(sec, v, Q);
+          if (!roots.length) {
             showError(["No normal depth exists for that discharge in this channel — check the slope, roughness and geometry."]);
             return;
           }
+          y = roots[0];   // shallowest — see docs/adr/0003
         } else {
           y = v.y;
-          Q = discharge(v.b, v.z, y, v.n, v.S);
+          Q = discharge(sec, v, y);
         }
 
-        var s = section(v.b, v.z, y);
+        var s = sectionProps(sec, v, y);
         var V = s.A > 0 ? Q / s.A : 0;
         var Fr = s.D > 0 ? V / Math.sqrt(G * s.D) : Infinity;
-        var freeboard = v.H - y;
+        var containing = sec.math.containing(v);
+        var freeboard = containing - y;
 
         $("primary-label").textContent = mode === "depth" ? "Normal depth" : "Discharge";
         $("primary-value").textContent = fmt(mode === "depth" ? y : Q);
@@ -1117,7 +1333,7 @@
         out.V.textContent = fmt(V);
         out.Fr.textContent = fmt(Fr);
         out.regime.textContent = regime(Fr);
-        out.Qfull.textContent = fmt(discharge(v.b, v.z, v.H, v.n, v.S));
+        out.Qfull.textContent = fmt(discharge(sec, v, containing));
         out.free.textContent = fmt(Math.abs(freeboard));
         $("dt-free").textContent = freeboard < 0 ? "Depth above bank" : "Freeboard";
 
@@ -1131,6 +1347,16 @@
           notes.push("<strong>Near critical.</strong> Uniform-flow calculations are " +
                      "unreliable within a few percent of Fr = 1.");
         }
+        // A statement of fact about the section, not a recommendation: a section whose
+        // conveyance is not monotone in depth can convey the same discharge at more than one
+        // uniform-flow depth, and the shallowest is the one reported. Unreachable for a
+        // trapezoid, whose Q(y) rises strictly with depth. See docs/adr/0003.
+        if (roots.length > 1) {
+          notes.push("<strong>More than one normal depth.</strong> This section conveys " +
+                     fmt(Q) + " m³/s at " + roots.length + " depths — the shallowest is " +
+                     "reported. The others are " +
+                     roots.slice(1).map(function (r) { return fmt(r) + " m"; }).join(", ") + ".");
+        }
         if (notes.length) {
           $("warn").innerHTML = notes.join("<br><br>");
           $("warn").classList.remove("hidden");
@@ -1138,13 +1364,13 @@
           $("warn").classList.add("hidden");
         }
 
-        shape = { b: v.b, z: v.z, H: v.H, y: y };
+        shape = { v: v, y: y };
 
         if (!sweepOn.checked) {
           clearChart();   // state = null, so redraw() skips the sweep entirely
         } else {
           var lo = parseFloat(sminEl.value), hi = parseFloat(smaxEl.value);
-          var rangeProblems = validateRange(sweepParam, lo, hi);
+          var rangeProblems = validateRange(sec, sweepParam, lo, hi);
           if (rangeProblems.length) {
             showChartError(rangeProblems);
           } else {
@@ -1201,7 +1427,7 @@
       function init() {
         var h = readHash();
         var v = readInputs();
-        var allowed = sweepable(currentMode());
+        var allowed = sweepable(sec, currentMode());
         var p = h.sweep && allowed.indexOf(h.sweep) >= 0 ? h.sweep : allowed[0];
         var haveRange = isFinite(parseFloat(h.smin)) && isFinite(parseFloat(h.smax));
         sweepOn.checked = h.swon !== undefined

@@ -150,7 +150,8 @@ evidence anyway.
 
 The math is verified by **reimplementing it independently in Python** from the equations — not
 by copying the JS — and comparing. For the sweep, dump samples from the live page
-(`sweep(param, lo, hi, v, mode, n)` is global) as JSON and compare columns; the last run was
+(`sweep(sec, param, lo, hi, v, mode, n)` is global, as are `sec`, `discharge(sec, v, y)` and
+`normalDepths(sec, v, Q)`) as JSON and compare columns; the last run was
 122 checks across 7 sweep configurations with 0 failures. Scratch scripts are throwaway;
 recreate them as needed.
 
@@ -205,6 +206,15 @@ names a sweep parameter or range asked for a chart, so it gets one.
 
 ## Open items
 
+- **Section types: steps 0–4 of [docs/plan-section-types.md](./docs/plan-section-types.md) are
+  done, 5–8 are not.** The generic core, the section-type registry and the root-enumerating
+  solver have landed with no behaviour change — trapezoidal is still the only section type and
+  every reference value below is unchanged. Still to come: the section-type selector and
+  dynamic fields grid (step 5), circular (6), its verification (7) and the doc updates (8).
+  Read the plan and [docs/adr/0003](./docs/adr/0003-shallowest-root-conveyance-not-monotone.md)
+  before touching the hydraulics or the sweep. 0003 retires the "`Q(y)` is strictly increasing"
+  argument that this file and `README.md` still state below — that assumption holds for a
+  trapezoid and fails for both a circular and a compound section.
 - The `briannei-site` landing page does not yet have a card for this tool.
 - The sweep is static by design: no hover readout, no click-to-set-the-operating-point. Both
   were considered and deferred so that a screenshot is the complete figure and there is no
