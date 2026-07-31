@@ -187,11 +187,16 @@
         margin: 0;
         accent-color: var(--accent);
         cursor: pointer;
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 0.15s ease, visibility 0.15s ease;
       }
 
       /* The radios are inert until the sweep is switched on, so the column still reserves
-         their width and the fields don't reflow when it is. */
-      .sweeppick:disabled { cursor: default; opacity: 0.35; }
+         their width and the fields don't reflow when it is. Hidden rather than dimmed while
+         inert: opacity/visibility on the dot itself, not display, so the reserved column
+         width is untouched either way. */
+      .sweeppick:not(:disabled) { opacity: 1; visibility: visible; }
 
       .field.swept input[type="number"] { border-color: var(--accent); }
       .field.swept .sym { color: var(--accent); }
@@ -201,11 +206,11 @@
       .sweeprange.hidden { display: none; }
 
       .sweeprange {
-        grid-column: 1 / -1;
         display: grid;
         grid-template-columns: auto 1fr auto 1fr;
         align-items: center;
         gap: 0.4rem 0.45rem;
+        margin-top: 0.6rem;
         padding: 0.5rem 0.55rem;
         border: 1px solid var(--accent);
         border-radius: 6px;
@@ -241,6 +246,82 @@
         line-height: 1.45;
       }
 
+      /* The sweep on/off lives here, below the fields grid it doesn't affect, rather than
+         in the figure panel it does — it reads as a distinct thing to opt into (chart the
+         response) rather than another field to fill in. Dashed rule separates it from the
+         fields the same way .hint's solid one separates the hint from the fields. */
+      .sweep-callout {
+        flex: 0 0 auto;
+        margin: 0.9rem 0 0;
+        padding-top: 0.8rem;
+        border-top: 1px dashed var(--line);
+      }
+
+      .sweep-card {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.6rem;
+        padding: 0.55rem 0.7rem;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        transition: border-color 0.15s ease, background 0.15s ease;
+      }
+
+      .sweep-card:has(#sweep-on:checked) {
+        border-color: var(--accent);
+        background: color-mix(in srgb, var(--accent) 6%, var(--card));
+      }
+
+      .sweep-card .stitle { font-size: 0.82rem; font-weight: 600; color: var(--fg); }
+      .sweep-card .ssub { display: block; margin-top: 0.1rem; font-size: 0.68rem; color: var(--muted); }
+
+      /* Real rail-and-knob switch, not the bare checkbox this replaced — big enough to read
+         as a control worth noticing without adding height to the panel. */
+      .switch {
+        --w: 2.2rem;
+        --h: 1.2rem;
+        position: relative;
+        display: inline-flex;
+        flex: 0 0 auto;
+        cursor: pointer;
+      }
+
+      .switch input {
+        position: absolute;
+        opacity: 0;
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        cursor: pointer;
+      }
+
+      .switch .rail {
+        width: var(--w);
+        height: var(--h);
+        border-radius: 999px;
+        background: var(--line);
+        position: relative;
+        transition: background 0.15s ease;
+      }
+
+      .switch .rail::after {
+        content: "";
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: calc(var(--h) - 4px);
+        height: calc(var(--h) - 4px);
+        border-radius: 50%;
+        background: var(--card);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+        transition: transform 0.15s ease;
+      }
+
+      .switch:has(input:checked) .rail { background: var(--accent); }
+      .switch:has(input:checked) .rail::after { transform: translateX(calc(var(--w) - var(--h))); }
+      .switch:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 999px; }
+
       /* ---- figures: cross-section over sweep chart ---- */
 
       /* flex-basis 0 rather than auto so the two figures split the leftover height evenly
@@ -259,9 +340,9 @@
       .half { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
 
       /* A hairline on the heading rather than a divider element — one panel, not two, so
-         the vertical budget isn't spent twice on borders and padding. The toggle lives on
-         this row rather than in the controls column: it governs the figure, and the 21rem
-         controls column has no width to spare. */
+         the vertical budget isn't spent twice on borders and padding. The on/off switch
+         itself lives in the controls column now (.sweep-callout), not on this row — the
+         21rem column had no width to spare for it, but has room below the fields grid. */
       .figure .subhead {
         flex: 0 0 auto;
         display: flex;
@@ -275,29 +356,6 @@
 
       .figure .subhead h2 { margin: 0; }
 
-      .toggle {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.35rem;
-        font-size: 0.69rem;
-        font-weight: 600;
-        letter-spacing: 0.11em;
-        text-transform: uppercase;
-        color: var(--muted);
-        cursor: pointer;
-        user-select: none;
-      }
-
-      .toggle input {
-        width: 0.85rem;
-        height: 0.85rem;
-        margin: 0;
-        accent-color: var(--accent);
-        cursor: pointer;
-      }
-
-      .toggle:has(input:checked) { color: var(--accent); }
-      .toggle:focus-within { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 3px; }
 
       .figcap {
         flex: 0 0 auto;
@@ -433,7 +491,13 @@
       <!-- The field rows are generated from the section type's parameter list — see
            buildFields(). The parameter declarations are the only statement of what a section
            takes; a second one written out here would be a second thing to keep in step. -->
-      <div class="fields" id="fields">
+      <div class="fields" id="fields"></div>
+
+      <div class="sweep-callout">
+        <div class="sweep-card">
+          <span class="stitle">Sensitivity sweep<span class="ssub">Chart the response across a range</span></span>
+          <label class="switch"><input type="checkbox" id="sweep-on" aria-label="Show sensitivity sweep"><span class="rail"></span></label>
+        </div>
         <div class="sweeprange hidden" id="sweeprange">
           <span class="srhead">Sweep range for <em class="sym" id="sweep-sym">Q</em></span>
           <span>from</span>
@@ -455,10 +519,6 @@
 
       <div class="subhead">
         <h2>Sensitivity sweep</h2>
-        <label class="toggle">
-          <input type="checkbox" id="sweep-on">
-          Show
-        </label>
       </div>
 
       <div class="half hidden" id="sweepfig">
@@ -1340,11 +1400,10 @@
 
       // Generated from the section type's parameter list rather than written out in the
       // markup, so the declaration is the only place that says what a section takes. The
-      // range row is a persistent node — it is lifted out before the grid is cleared and put
-      // back after, because placeRangeRow moves it around inside the grid.
+      // range row lives outside the grid (below the sweep toggle), so clearing the grid here
+      // does not touch it.
       function buildFields(sec, keep) {
         var fields = $("fields");
-        rangeRow.remove();
         fields.innerHTML = "";
         inputs = {};
         sweepRadios = [];
@@ -1402,7 +1461,6 @@
           fields.appendChild(row);
         });
 
-        fields.appendChild(rangeRow);
         KEYS = paramKeys(sec);
       }
 
@@ -1433,25 +1491,6 @@
                       readInputs(), true);
       }
 
-      // The range row sits beneath the visual row containing the swept field rather than
-      // immediately after the field itself: the fields grid is two columns wide, so a
-      // full-width row inserted mid-row would leave a hole in it.
-      function placeRangeRow(p) {
-        var visible = Array.prototype.filter.call(
-          document.querySelectorAll(".fields .field"),
-          function (f) { return !f.classList.contains("hidden"); });
-        var idx = visible.indexOf($("row-" + p));
-        if (idx < 0) return;
-        var end = Math.min(visible.length - 1, Math.floor(idx / 2) * 2 + 1);
-        var anchor = visible[end];
-        // Bail out when it is already there. insertAdjacentElement re-inserts the node even
-        // if the position is unchanged, and re-inserting blurs whatever inside it has focus
-        // — which, since compute() runs on every keystroke, cost a focused range box its
-        // focus after each digit.
-        if (anchor.nextElementSibling === rangeRow) return;
-        anchor.insertAdjacentElement("afterend", rangeRow);
-      }
-
       function setSweepParam(p, v, reseed) {
         sweepParam = p;
         sweepRadios.forEach(function (r) { r.checked = (r.value === p); });
@@ -1463,7 +1502,6 @@
           sminEl.value = rg[0];
           smaxEl.value = rg[1];
         }
-        placeRangeRow(p);
       }
 
       // Off is the resting state: the sweep is a second question, and with it collapsed the
@@ -1550,8 +1588,8 @@
 
         var v = readInputs();
 
-        // Setting an attribute neither blurs the field nor moves it, so this is safe on every
-        // keystroke in a way that re-inserting an element is not — see placeRangeRow.
+        // Setting an attribute neither blurs the field nor moves it, so this is safe to do
+        // on every keystroke.
         var yCeil = stepCeiling(sec, P_y, v, mode);
         if (yCeil === null) inputs.y.removeAttribute("max");
         else inputs.y.max = yCeil;
@@ -1562,7 +1600,6 @@
         // parameter the mode has since made illegal.
         var allowed = sweepable(sec, mode);
         if (allowed.indexOf(sweepParam) < 0) setSweepParam(allowed[0], v, true);
-        else placeRangeRow(sweepParam);
         setSweepEnabled(sweepOn.checked);
 
         var problems = validate(sec, v, mode);

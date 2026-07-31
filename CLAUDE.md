@@ -59,7 +59,7 @@ and `outline`. Everything else is generic and must stay that way:
   one: a closed section's `y` in flow mode stops one step below the crown, because `y >= D`
   is an error (`docs/adr/0004`) and a `max` set at the crown would still let the spinner land
   exactly on it. It depends on `D`, so `compute()` re-sets it on every keystroke — safe
-  because setting an attribute neither blurs nor moves the field, unlike `placeRangeRow`.
+  because setting an attribute neither blurs nor moves the field.
   A trapezoid's `y` gets **no** ceiling: overtopping is a warning about a flow that really
   happens, so the arrows may walk past the bank. Two states remain reachable and should stay
   reachable, since neither is something an arrow did: `b` and `z` both arrowed to zero is the
@@ -111,10 +111,6 @@ Consequences to respect:
   out-specify the class and the element refuses to hide. This has bitten twice. The same trap
   in a stylesheet: `.hidden` is declared early, so any later single-class rule setting
   `display` beats it. `.sweeprange` and `.half` therefore carry explicit `.x.hidden` rules.
-- **`placeRangeRow` must not re-insert the range row when it is already in place.**
-  `insertAdjacentElement` re-inserts a node even when the position is unchanged, and
-  re-inserting blurs whatever inside it has focus. Since `compute()` runs on every keystroke,
-  that cost a focused range box its focus after every single digit.
 - The figure column holds **two** figures in one panel: cross-section above, sweep chart
   below, split by a hairline on the second heading row rather than a divider element. Each
   figure travels with its own caption inside a `.half` at `flex: 1 1 0`, so the two take equal
@@ -122,13 +118,19 @@ Consequences to respect:
   drawing areas differ by a line of text. `flex-basis: auto` would let contents decide and
   `height` in the stacked media query would lose to a `0` basis, which is why that query
   resets `flex` to `0 0 auto`.
-- The sweep half is **collapsible and off by default** (the "Show" checkbox on the sweep
-  heading row). With it off the cross-section takes the whole panel. The toggle sits on that
-  heading rather than in the controls column: it governs the figure, and a 21rem column has no
-  width to spare. When off, the sweep radios are `disabled` — not hidden, so the field rows
-  don't reflow — and the range row and swept-field highlight are hidden. The swept parameter
-  and its range are still tracked while off, so switching back on restores the same chart
-  rather than a re-seeded one.
+- The sweep half is **collapsible and off by default** (a switch in the Inputs column, in
+  `.sweep-callout` below the fields grid — not on the figure heading). With it off the
+  cross-section takes the whole panel. The switch lives in the controls column rather than on
+  the figure's heading row: that row has just the "Sensitivity sweep" `h2` now, and the 21rem
+  controls column has room below the fields for the switch and its range row even though it
+  never had width to spare for one beside a heading. The range row (`#sweeprange`) is a fixed
+  child of `.sweep-callout`, not repositioned per swept parameter — there is no `placeRangeRow`
+  any more; the row labels itself with the swept symbol instead of sitting next to that
+  parameter's field. When off, the sweep radios are hidden via `opacity`/`visibility` on the
+  radio itself (not `display`), so the `.fctl` column they sit in still reserves their width
+  and the field rows don't reflow when they reappear. The range row and swept-field highlight
+  are also hidden. The swept parameter and its range are still tracked while off, so switching
+  back on restores the same chart rather than a re-seeded one.
 - One panel, not two, so the vertical budget isn't spent twice on borders and padding.
 - The sweep radio shares a row with the **input**, not the label. Putting it in the label row
   cost enough width to truncate "b — bottom width, m" to an ellipsis; a 21rem column has room
