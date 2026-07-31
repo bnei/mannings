@@ -907,7 +907,7 @@
             params: [
               {
                 key: "D", sym: "D", desc: "diameter, m", name: "Diameter",
-                domain: "positive", sweep: true, def: "1", step: "0.05",
+                domain: "positive", sweep: true, def: "2", step: "0.05",
                 // Down to a size worth calling a pipe, up to twice the current one. Not from
                 // zero: a zero diameter is not a section, and the domain rejects it anyway.
                 seed: function (v) { return [0.15, v.D > 0 && isFinite(v.D) ? 2 * v.D : 2]; }
