@@ -1,7 +1,13 @@
 # Plan — section types (trapezoidal, circular, arbitrary)
 
-Agreed in a design session on 2026-07-30. `CONTEXT.md` has already been updated with the
-resulting vocabulary; nothing else has been touched. Work has not started.
+Agreed in a design session on 2026-07-30 and **completed on 2026-07-30** — all eight steps
+shipped. Kept for the decisions ledger and the rejected alternatives below, which are the part
+worth re-reading; the step list is history. Where this plan and `CLAUDE.md` disagree about what
+the code does, `CLAUDE.md` is current and this is what was intended.
+
+Two departures from the plan as written, both recorded in `CLAUDE.md`: the sweep range is also
+re-seeded on a section change (the plan only listed swept parameter and mode), and the cost of
+the new solver came out at 3.2× rather than the ~2× estimated below.
 
 Goal: generalise the solver so section types are pluggable, ship **trapezoidal + circular**,
 and leave a seam that an **arbitrary** station/elevation section fits without rework.

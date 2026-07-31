@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Manning's equation — trapezoidal channel</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-    <meta name="description" content="Solve Manning's equation for a trapezoidal channel: normal depth from discharge, or discharge from depth. SI units. Runs entirely in your browser.">
+    <meta name="description" content="Solve Manning's equation for a trapezoidal or circular channel section: normal depth from discharge, or discharge from depth. SI units. Runs entirely in your browser.">
     <style>
       :root {
         color-scheme: light dark;
@@ -105,6 +105,38 @@
       }
 
       .titlebar p { margin: 0; color: var(--muted); font-size: 0.8rem; }
+
+      /* The section type is part of the title rather than another row in the controls
+         column: it decides what the rest of the page means, and the controls column has no
+         vertical budget for a control of that weight. The caret sits on the wrapper because
+         appearance: none removes the platform one, and without a caret a select styled to
+         match its surrounding text reads as text. */
+      .secpick { position: relative; display: inline-block; }
+
+      .secpick::after {
+        content: "▾";
+        position: absolute;
+        top: 50%;
+        right: 0.5rem;
+        transform: translateY(-50%);
+        color: var(--muted);
+        font-size: 0.8em;
+        pointer-events: none;
+      }
+
+      .secpick select {
+        appearance: none;
+        -webkit-appearance: none;
+        padding: 0.05rem 1.5rem 0.05rem 0.45rem;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--card);
+        color: inherit;
+        font: inherit;
+        cursor: pointer;
+      }
+
+      .secpick select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
       /* ---- controls ---- */
 
@@ -380,8 +412,8 @@
   </head>
   <body>
     <div class="titlebar">
-      <h1>Manning's equation — trapezoidal channel</h1>
-      <p>Uniform steady flow · symmetric trapezoid · SI units</p>
+      <h1>Manning's equation — <span class="secpick"><select id="in-sec" aria-label="Section type"></select></span></h1>
+      <p id="subtitle">Uniform steady flow · symmetric trapezoid · SI units</p>
     </div>
 
     <section class="panel controls">
@@ -398,62 +430,10 @@
         </label>
       </div>
 
-      <div class="fields">
-        <div class="field" id="row-Q">
-          <label for="in-Q"><span class="sym">Q</span> — discharge, m³/s</label>
-          <div class="fctl">
-            <input type="number" id="in-Q" value="5" step="any" inputmode="decimal">
-            <input type="radio" class="sweeppick" name="sweep" value="Q" aria-label="Sweep discharge">
-          </div>
-        </div>
-
-        <div class="field hidden" id="row-y">
-          <label for="in-y"><span class="sym">y</span> — flow depth, m</label>
-          <div class="fctl">
-            <input type="number" id="in-y" value="0.8" step="any" inputmode="decimal">
-            <input type="radio" class="sweeppick" name="sweep" value="y" aria-label="Sweep flow depth">
-          </div>
-        </div>
-
-        <div class="field" id="row-b">
-          <label for="in-b"><span class="sym">b</span> — bottom width, m</label>
-          <div class="fctl">
-            <input type="number" id="in-b" value="2" step="any" inputmode="decimal">
-            <input type="radio" class="sweeppick" name="sweep" value="b" aria-label="Sweep bottom width">
-          </div>
-        </div>
-
-        <div class="field" id="row-z">
-          <label for="in-z"><span class="sym">z</span> — side slope, H:V</label>
-          <div class="fctl">
-            <input type="number" id="in-z" value="2" step="any" inputmode="decimal">
-            <input type="radio" class="sweeppick" name="sweep" value="z" aria-label="Sweep side slope">
-          </div>
-        </div>
-
-        <div class="field" id="row-H">
-          <label for="in-H"><span class="sym">H</span> — channel height, m</label>
-          <div class="fctl">
-            <input type="number" id="in-H" value="1.5" step="any" inputmode="decimal">
-          </div>
-        </div>
-
-        <div class="field" id="row-n">
-          <label for="in-n"><span class="sym">n</span> — Manning's n</label>
-          <div class="fctl">
-            <input type="number" id="in-n" value="0.03" step="any" inputmode="decimal">
-            <input type="radio" class="sweeppick" name="sweep" value="n" aria-label="Sweep Manning's n">
-          </div>
-        </div>
-
-        <div class="field" id="row-S">
-          <label for="in-S"><span class="sym">S₀</span> — bed slope, m/m</label>
-          <div class="fctl">
-            <input type="number" id="in-S" value="0.01" step="any" inputmode="decimal">
-            <input type="radio" class="sweeppick" name="sweep" value="S" aria-label="Sweep bed slope">
-          </div>
-        </div>
-
+      <!-- The field rows are generated from the section type's parameter list — see
+           buildFields(). The parameter declarations are the only statement of what a section
+           takes; a second one written out here would be a second thing to keep in step. -->
+      <div class="fields" id="fields">
         <div class="sweeprange hidden" id="sweeprange">
           <span class="srhead">Sweep range for <em class="sym" id="sweep-sym">Q</em></span>
           <span>from</span>
@@ -463,11 +443,7 @@
         </div>
       </div>
 
-      <p class="hint">
-        <em>z</em> is horizontal run per unit rise — <em>z</em> = 2 means 2 m out for every
-        1 m up. Use 0 for vertical walls, or <em>b</em> = 0 for a triangular section.
-        <em>H</em> is the channel itself, invert to top of bank.
-      </p>
+      <p class="hint" id="hint"></p>
     </section>
 
     <section class="panel figure">
@@ -526,7 +502,7 @@
             <dt>Flow regime</dt>
             <dd><span id="out-regime">—</span></dd>
 
-            <dt>Capacity at <em>H</em></dt>
+            <dt id="dt-Qfull">Capacity at <em>H</em></dt>
             <dd><span id="out-Qfull">—</span> <span class="unit">m³/s</span></dd>
 
             <dt id="dt-free">Freeboard</dt>
@@ -571,12 +547,19 @@
           P: g.P,
           T: g.T,
           R: g.P > 0 ? g.A / g.P : 0,
-          D: g.T > 0 ? g.A / g.T : 0   // hydraulic depth, used for Froude
+          // Hydraulic depth, used for Froude. Named Dh, not D: a circular section's D is its
+          // diameter, and two different quantities under one letter is how a wrong number
+          // gets into a report.
+          Dh: g.T > 0 ? g.A / g.T : 0
         };
       }
 
       function discharge(sec, v, y) {
         if (y <= 0) return 0;
+        // Above the crown there is no free surface and no further flow area. NaN rather than
+        // zero or the full-bore value, so it reads as a gap in a sweep and never as a curve
+        // running flat along the top of a pipe.
+        if (y > sec.math.depthLimit(v)) return NaN;
         var s = sectionProps(sec, v, y);
         if (s.A <= 0 || s.R <= 0) return 0;
         return manning(s.A, s.R, v.n, v.S);
@@ -632,6 +615,30 @@
         return r.length ? r[0] : null;
       }
 
+      // The greatest discharge a section conveys at any depth, and the depth it occurs at, or
+      // null for an open section — whose conveyance has no maximum. Found on the same grid the
+      // root enumeration uses and refined by ternary search inside the neighbouring cells, so
+      // there is no per-section-type formula to get wrong.
+      function maxDischarge(sec, v) {
+        var limit = sec.math.depthLimit(v);
+        if (!isFinite(limit)) return null;
+
+        var step = limit / GRID;
+        var best = -Infinity, bestY = 0, i, q;
+        for (i = 1; i <= GRID; i++) {
+          q = discharge(sec, v, limit * (i / GRID));
+          if (q > best) { best = q; bestY = limit * (i / GRID); }
+        }
+
+        var lo = Math.max(0, bestY - step), hi = Math.min(limit, bestY + step);
+        for (i = 0; i < 60; i++) {
+          var a = lo + (hi - lo) / 3, b = hi - (hi - lo) / 3;
+          if (discharge(sec, v, a) < discharge(sec, v, b)) lo = a; else hi = b;
+        }
+        var peak = (lo + hi) / 2;
+        return { Q: discharge(sec, v, peak), y: peak };
+      }
+
       // The band around unity is reported as near-critical rather than pinned to Fr = 1.000
       // — uniform-flow assumptions are unreliable there and exact criticality would be
       // false precision.
@@ -668,13 +675,13 @@
 
       var P_Q = {
         key: "Q", sym: "Q", desc: "discharge, m³/s", name: "Discharge",
-        domain: "positiveAsPoint", sweep: true,
+        domain: "positiveAsPoint", sweep: true, def: "5",
         seed: function (v) { return [0, v.Q > 0 && isFinite(v.Q) ? 2 * v.Q : 10]; }
       };
 
       var P_y = {
         key: "y", sym: "y", desc: "flow depth, m", name: "Flow depth",
-        domain: "positiveAsPoint", sweep: true,
+        domain: "positiveAsPoint", sweep: true, def: "0.8",
         // Seeded from the containing dimension rather than from H, so a closed section seeds
         // from its crown without this needing to know which is which.
         seed: function (v, sec) {
@@ -685,13 +692,16 @@
 
       var P_n = {
         key: "n", sym: "n", desc: "Manning's n", name: "Manning's n",
-        domain: "positive", sweep: true,
+        // The generated "sweep manning's n" reads as a lowercased surname, so this one is
+        // spelled out. Every other parameter's name lowercases correctly.
+        aria: "Sweep Manning's n",
+        domain: "positive", sweep: true, def: "0.03",
         seed: function () { return [0.01, 0.1]; }
       };
 
       var P_S = {
         key: "S", sym: "S₀", desc: "bed slope, m/m", name: "Bed slope",
-        domain: "positive", sweep: true,
+        domain: "positive", sweep: true, def: "0.01",
         // The generated sentence is right for n and too thin for S₀, where the reason is the
         // equation itself rather than a convention.
         msg: {
@@ -736,6 +746,15 @@
       // `.view` — only the drawing and UI layers do — which makes the rule greppable rather
       // than a matter of discipline. A single registry rather than two tables keyed by
       // section type, because two tables drift.
+      // Stated once because two paths reach it: a flow depth given at or above the crown, and
+      // a depth solved there when the discharge is exactly the capacity at the crown. See
+      // docs/adr/0004 — pressurized flow is out of scope, not merely warned about.
+      function surchargeProblem(crown) {
+        return "Flow depth reaches the crown at " + fmt(crown) + " m, so the section " +
+               "surcharges. The flow becomes pressurized rather than governed by a free " +
+               "surface, and Manning's equation no longer describes it.";
+      }
+
       var SECTIONS = {
         trapezoid: {
           id: "trapezoid",
@@ -743,19 +762,19 @@
             params: [
               {
                 key: "b", sym: "b", desc: "bottom width, m", name: "Bottom width",
-                domain: "nonNegative", sweep: true,
+                domain: "nonNegative", sweep: true, def: "2",
                 seed: function (v) { return [0, v.b > 0 && isFinite(v.b) ? Math.max(5, 2 * v.b) : 5]; }
               },
               {
                 key: "z", sym: "z", desc: "side slope, H:V", name: "Side slope",
-                domain: "nonNegative", sweep: true,
+                domain: "nonNegative", sweep: true, def: "2",
                 seed: function () { return [0, 4]; }
               },
               {
                 // Not sweepable: H appears in neither Q(y) nor normalDepth(Q), so sweeping it
                 // would draw a flat line.
                 key: "H", sym: "H", desc: "channel height, m", name: "Channel height",
-                domain: "positive", sweep: false
+                domain: "positive", sweep: false, def: "1.5"
               }
             ],
 
@@ -797,8 +816,118 @@
           },
           view: {
             name: "trapezoidal channel",
+            subtitle: "Uniform steady flow · symmetric trapezoid · SI units",
             aria: "Trapezoidal channel cross-section",
-            invertLabel: function (v) { return "b = " + fmt(v.b) + " m"; }
+            figcap: "Drawn to scale · dashed line is top of bank",
+            capacityLabel: "Capacity at <em>H</em>",
+            // Freeboard is clearance against a bank water can pass over, so its two states
+            // are both about the bank. A closed section names the same row differently.
+            clearanceLabel: function (free) { return free < 0 ? "Depth above bank" : "Freeboard"; },
+            hint: "<em>z</em> is horizontal run per unit rise — <em>z</em> = 2 means 2 m out " +
+                  "for every 1 m up. Use 0 for vertical walls, or <em>b</em> = 0 for a " +
+                  "triangular section. <em>H</em> is the channel itself, invert to top of bank.",
+            invertLabel: function (v) { return "b = " + fmt(v.b) + " m"; },
+
+            // Conditions particular to this section type. The generic ones — near critical,
+            // more than one normal depth — are raised by compute() for every section.
+            conditions: function (sec, v, y) {
+              var free = v.H - y;
+              return free < 0
+                ? ["<strong>Channel overtops.</strong> The water surface sits " + fmt(-free) +
+                   " m above the top of bank, so the section cannot carry this flow — " +
+                   "results describe an unconfined trapezoid."]
+                : [];
+            }
+          }
+        },
+
+        circle: {
+          id: "circle",
+          math: {
+            params: [
+              {
+                key: "D", sym: "D", desc: "diameter, m", name: "Diameter",
+                domain: "positive", sweep: true, def: "1",
+                // Down to a size worth calling a pipe, up to twice the current one. Not from
+                // zero: a zero diameter is not a section, and the domain rejects it anyway.
+                seed: function (v) { return [0.15, v.D > 0 && isFinite(v.D) ? 2 * v.D : 2]; }
+              }
+            ],
+
+            // Closed section: the crown bounds it, and the diameter is both the containing
+            // dimension and the only geometry there is — hence no separate channel height.
+            depthLimit: function (v) { return v.D; },
+            containing: function (v) { return v.D; },
+
+            // Partly full circle. th is the angle subtended at the centre by the wetted
+            // boundary: th = 2·acos(1 − 2y/D), so A = r²(th − sin th)/2, P = r·th and
+            // T = 2r·sin(th/2). Analytic, never measured off the drawn polygon — a polygon's
+            // perimeter under-reports a curved boundary, and P is two thirds of R.
+            props: function (v, y) {
+              var r = v.D / 2;
+              if (!(r > 0)) return { A: 0, P: 0, T: 0 };
+              // Clamped because a depth a floating-point step outside [0, D] would put acos
+              // out of domain and return NaN, which must never reach the SVG.
+              var th = 2 * Math.acos(Math.min(1, Math.max(-1, 1 - Math.min(y, v.D) / r)));
+              return {
+                A: r * r * (th - Math.sin(th)) / 2,
+                P: r * th,
+                T: 2 * r * Math.sin(th / 2)
+              };
+            },
+
+            validate: function (v, mode) {
+              return mode === "flow" && v.y >= v.D ? [surchargeProblem(v.D)] : [];
+            },
+
+            // 96 segments is a drawing decision and nothing else: it is smooth at the size
+            // this figure is ever drawn, and no section property is computed from it.
+            outline: function (v, d) {
+              var r = v.D / 2;
+              if (!(r > 0)) return [[0, 0]];
+              var a = Math.acos(Math.min(1, Math.max(-1, 1 - Math.min(Math.max(d, 0), v.D) / r)));
+              var pts = [], N = 96;
+              for (var i = 0; i <= N; i++) {
+                var t = -a + 2 * a * (i / N);
+                pts.push([r * Math.sin(t), r * (1 - Math.cos(t))]);
+              }
+              return pts;
+            }
+          },
+          view: {
+            name: "circular section",
+            subtitle: "Uniform steady flow · circular section · SI units",
+            aria: "Circular channel cross-section",
+            figcap: "Drawn to scale · the crown is the top of the outline",
+            capacityLabel: "Capacity at crown",
+            // Never negative: a depth at or above the crown is an error, not a result, so
+            // this row has one name rather than two. Not freeboard — freeboard is clearance
+            // against a bank that water can pass over.
+            clearanceLabel: function () { return "Depth to crown"; },
+            hint: "<em>D</em> is the internal diameter, and also the invert-to-crown " +
+                  "distance — a circular section has no separate channel height. Flow " +
+                  "reaching the crown is pressurized and outside what this tool solves.",
+            invertLabel: function (v) { return "D = " + fmt(v.D) + " m"; },
+
+            conditions: function (sec, v, y) {
+              var notes = [];
+              if (y > 0.9 * v.D) {
+                notes.push("<strong>Nearly closed.</strong> The water surface is within a " +
+                           "tenth of the crown, where it narrows quickly. Hydraulic depth, " +
+                           "the Froude number and the flow regime stop being meaningful " +
+                           "there — the area, perimeter and velocity do not.");
+              }
+              var peak = maxDischarge(sec, v);
+              if (peak && peak.Q > discharge(sec, v, v.D)) {
+                notes.push("<strong>Peak conveyance is below the crown.</strong> This " +
+                           "section carries up to " + fmt(peak.Q) + " m³/s at " +
+                           fmt(peak.y) + " m, more than its capacity flowing full, because " +
+                           "the wetted perimeter grows faster than the area near the crown. " +
+                           "Capacity is still reported at the crown: the peak is not a depth " +
+                           "flow can be held at.");
+              }
+              return notes;
+            }
           }
         }
       };
@@ -825,7 +954,9 @@
           var m = domainProblem(p, v);
           if (m) e.push(m);
         });
-        return e.concat(sec.math.validate(v));
+        // The mode goes through because whether y is an input at all depends on it, and a
+        // closed section's surcharge rule is a rule about the input y.
+        return e.concat(sec.math.validate(v, mode));
       }
 
       // ---- Sensitivity sweep ----
@@ -974,9 +1105,11 @@
         o.push('<polyline points="' + pts(bank) + '" fill="none" stroke="var(--fg)" ' +
                'stroke-width="2.5" stroke-linejoin="round"/>');
 
-        // Mark the top of bank only when the water surface is elsewhere, so overtopping
-        // reads unambiguously instead of being clipped away.
-        if (Math.abs(y - H) > 1e-9) {
+        // Mark the containing dimension only when the water surface is elsewhere, so
+        // overtopping reads unambiguously instead of being clipped away — and only when the
+        // boundary is open there. A closed section's outline closes at the crown, so the line
+        // would have zero length and the outline already shows it.
+        if (Math.abs(y - H) > 1e-9 && Math.abs(bank[bank.length - 1][0] - bank[0][0]) > 1e-9) {
           o.push('<line x1="' + X(bank[0][0]) + '" y1="' + Y(H) +
                  '" x2="' + X(bank[bank.length - 1][0]) + '" y2="' + Y(H) +
                  '" stroke="' + (over ? "var(--err)" : "var(--line)") +
@@ -997,8 +1130,11 @@
                  ' text-anchor="end" dominant-baseline="middle">y = ' + fmt(y) + ' m</text>');
         }
 
+        // Anchored on the section's widest point rather than on the end of the outline: for a
+        // circle the outline ends at the crown, which is the middle of the figure. The two
+        // are the same point for a trapezoid, so this is unchanged there.
         if (!over && H - y > 1e-9) {
-          o.push('<text x="' + (parseFloat(X(bank[bank.length - 1][0])) + 8).toFixed(1) + '" y="' + Y((H + y) / 2) +
+          o.push('<text x="' + (parseFloat(X(maxX)) + 8).toFixed(1) + '" y="' + Y((H + y) / 2) +
                  '" fill="var(--muted)" ' + lab + ' dominant-baseline="middle">' +
                  fmt(H - y) + ' m</text>');
         }
@@ -1131,17 +1267,18 @@
 
       // ---- UI ----
 
-      // The one section type that ships so far. Step 5 makes this a selection; until then the
-      // markup below is the trapezoid's fields, statically.
-      var sec = SECTIONS.trapezoid;
+      var $ = function (id) { return document.getElementById(id); };
 
+      // The current section type, and the keys, field elements and sweep radios that follow
+      // from it. All four are rebuilt together by setSection() — nothing may cache one of
+      // them across a section change.
+      var sec = SECTIONS.trapezoid;
       var KEYS = paramKeys(sec);
       var inputs = {};
-      KEYS.forEach(function (k) { inputs[k] = document.getElementById("in-" + k); });
+      var sweepRadios = [];
 
       var modeRadios = Array.prototype.slice.call(document.querySelectorAll('input[name="mode"]'));
-      var sweepRadios = Array.prototype.slice.call(document.querySelectorAll('input[name="sweep"]'));
-      var $ = function (id) { return document.getElementById(id); };
+      var secSelect = $("in-sec");
       var out = {};
       ["A", "P", "R", "T", "V", "Fr", "regime", "Qfull", "free"].forEach(function (k) {
         out[k] = $("out-" + k);
@@ -1168,6 +1305,98 @@
         var v = {};
         KEYS.forEach(function (k) { v[k] = parseFloat(inputs[k].value); });
         return v;
+      }
+
+      // ---- Building the section-dependent UI ----
+
+      // Generated from the section type's parameter list rather than written out in the
+      // markup, so the declaration is the only place that says what a section takes. The
+      // range row is a persistent node — it is lifted out before the grid is cleared and put
+      // back after, because placeRangeRow moves it around inside the grid.
+      function buildFields(sec, keep) {
+        var fields = $("fields");
+        rangeRow.remove();
+        fields.innerHTML = "";
+        inputs = {};
+        sweepRadios = [];
+
+        paramList(sec).forEach(function (p) {
+          var row = document.createElement("div");
+          row.className = "field";
+          row.id = "row-" + p.key;
+
+          var label = document.createElement("label");
+          label.htmlFor = "in-" + p.key;
+          var sym = document.createElement("span");
+          sym.className = "sym";
+          sym.textContent = p.sym;
+          label.appendChild(sym);
+          label.appendChild(document.createTextNode(" — " + p.desc));
+
+          var ctl = document.createElement("div");
+          ctl.className = "fctl";
+
+          var input = document.createElement("input");
+          input.type = "number";
+          input.id = "in-" + p.key;
+          input.step = "any";
+          input.inputMode = "decimal";
+          // Whatever the user had for a parameter that survives the change of section type.
+          // Q, y, n and S₀ mean the same thing in every section; the geometry does not.
+          input.value = keep && keep[p.key] !== undefined ? keep[p.key] : p.def;
+          input.addEventListener("input", compute);
+          ctl.appendChild(input);
+          inputs[p.key] = input;
+
+          if (p.sweep) {
+            var radio = document.createElement("input");
+            radio.type = "radio";
+            radio.className = "sweeppick";
+            radio.name = "sweep";
+            radio.value = p.key;
+            radio.setAttribute("aria-label", p.aria || "Sweep " + p.name.toLowerCase());
+            radio.addEventListener("change", function () {
+              setSweepParam(p.key, readInputs(), true);
+              compute();
+            });
+            ctl.appendChild(radio);
+            sweepRadios.push(radio);
+          }
+
+          row.appendChild(label);
+          row.appendChild(ctl);
+          fields.appendChild(row);
+        });
+
+        fields.appendChild(rangeRow);
+        KEYS = paramKeys(sec);
+      }
+
+      // Everything on the page that names the section type. The page is one tool with a
+      // selectable section, not several tools, so the title changes rather than the URL.
+      function applyIdentity(sec) {
+        document.title = "Manning's equation — " + sec.view.name;
+        $("subtitle").textContent = sec.view.subtitle;
+        $("hint").innerHTML = sec.view.hint;
+        $("figcap").textContent = sec.view.figcap;
+        $("dt-Qfull").innerHTML = sec.view.capacityLabel;
+      }
+
+      // The one place a section change happens. Values are carried across for parameters the
+      // new section type shares, and the sweep falls back to a legal parameter when the one
+      // being swept does not exist in it.
+      function setSection(next, keep) {
+        sec = next;
+        secSelect.value = sec.id;
+        applyIdentity(sec);
+        buildFields(sec, keep);
+        var allowed = sweepable(sec, currentMode());
+        // Re-seeded on a section change even when the parameter survives: the span that
+        // makes sense for a depth or a width is set by the geometry, and switching section
+        // type is a deliberate act rather than a keystroke, so the reason for holding the
+        // axis still while numbers are edited does not apply.
+        setSweepParam(allowed.indexOf(sweepParam) >= 0 ? sweepParam : allowed[0],
+                      readInputs(), true);
       }
 
       // The range row sits beneath the visual row containing the swept field rather than
@@ -1307,10 +1536,22 @@
           Q = v.Q;
           roots = normalDepths(sec, v, Q);
           if (!roots.length) {
-            showError(["No normal depth exists for that discharge in this channel — check the slope, roughness and geometry."]);
+            // A closed section has a maximum discharge, and saying what it is is more use
+            // than telling the user to go and check their geometry.
+            var peak = maxDischarge(sec, v);
+            showError([peak
+              ? "No normal depth exists: this section conveys at most " + fmt(peak.Q) +
+                " m³/s, at a depth of " + fmt(peak.y) + " m. Above that the flow surcharges."
+              : "No normal depth exists for that discharge in this channel — check the slope, roughness and geometry."]);
             return;
           }
           y = roots[0];   // shallowest — see docs/adr/0003
+          // Reachable only when the discharge is exactly the capacity at the crown, but that
+          // depth is surcharged for the same reason a depth typed in flow mode would be.
+          if (y >= sec.math.depthLimit(v)) {
+            showError([surchargeProblem(sec.math.containing(v))]);
+            return;
+          }
         } else {
           y = v.y;
           Q = discharge(sec, v, y);
@@ -1318,7 +1559,7 @@
 
         var s = sectionProps(sec, v, y);
         var V = s.A > 0 ? Q / s.A : 0;
-        var Fr = s.D > 0 ? V / Math.sqrt(G * s.D) : Infinity;
+        var Fr = s.Dh > 0 ? V / Math.sqrt(G * s.Dh) : Infinity;
         var containing = sec.math.containing(v);
         var freeboard = containing - y;
 
@@ -1335,14 +1576,9 @@
         out.regime.textContent = regime(Fr);
         out.Qfull.textContent = fmt(discharge(sec, v, containing));
         out.free.textContent = fmt(Math.abs(freeboard));
-        $("dt-free").textContent = freeboard < 0 ? "Depth above bank" : "Freeboard";
+        $("dt-free").textContent = sec.view.clearanceLabel(freeboard);
 
-        var notes = [];
-        if (freeboard < 0) {
-          notes.push("<strong>Channel overtops.</strong> The water surface sits " +
-                     fmt(-freeboard) + " m above the top of bank, so the section cannot " +
-                     "carry this flow — results describe an unconfined trapezoid.");
-        }
+        var notes = sec.view.conditions(sec, v, y);
         if (Fr > 0.95 && Fr < 1.05) {
           notes.push("<strong>Near critical.</strong> Uniform-flow calculations are " +
                      "unreliable within a few percent of Fr = 1.");
@@ -1352,10 +1588,11 @@
         // uniform-flow depth, and the shallowest is the one reported. Unreachable for a
         // trapezoid, whose Q(y) rises strictly with depth. See docs/adr/0003.
         if (roots.length > 1) {
+          var others = roots.slice(1).map(function (r) { return fmt(r) + " m"; });
           notes.push("<strong>More than one normal depth.</strong> This section conveys " +
                      fmt(Q) + " m³/s at " + roots.length + " depths — the shallowest is " +
-                     "reported. The others are " +
-                     roots.slice(1).map(function (r) { return fmt(r) + " m"; }).join(", ") + ".");
+                     "reported. The " + (others.length > 1 ? "others are " : "other is ") +
+                     others.join(", ") + ".");
         }
         if (notes.length) {
           $("warn").innerHTML = notes.join("<br><br>");
@@ -1386,7 +1623,7 @@
       // Inputs live in the URL fragment so a configuration is bookmarkable and shareable.
       // The fragment is never sent to the server, so the page stays fully static.
       function writeHash(v, mode) {
-        var parts = ["mode=" + mode];
+        var parts = ["sec=" + sec.id, "mode=" + mode];
         KEYS.forEach(function (k) { if (isFinite(v[k])) parts.push(k + "=" + v[k]); });
         // The sweep is part of the configuration: an explicit range exists so that a figure
         // is reproducible, which it would not be if the range lived only in the session.
@@ -1399,55 +1636,66 @@
         history.replaceState(null, "", "#" + parts.join("&"));
       }
 
-      // Applies the channel inputs directly and returns the sweep keys for init() to
-      // resolve, since the legal swept parameters depend on the mode this has just set.
+      // Parsed into a plain object rather than applied as it goes: the section type decides
+      // which fields exist, so nothing can be applied until it has been resolved. Unknown
+      // keys are ignored rather than treated as errors — a link written for a section type
+      // this build has never heard of should still open, on whatever it does understand.
       function readHash() {
         var h = {};
         var raw = location.hash.replace(/^#/, "");
         if (!raw) return h;
         raw.split("&").forEach(function (pair) {
           var kv = pair.split("=");
-          var k = decodeURIComponent(kv[0]);
-          var val = decodeURIComponent(kv[1] || "");
-          if (k === "mode") {
-            modeRadios.forEach(function (r) { r.checked = (r.value === val); });
-          } else if (k === "sweep" || k === "smin" || k === "smax" || k === "swon") {
-            h[k] = val;
-          } else if (inputs[k] && isFinite(parseFloat(val))) {
-            inputs[k].value = val;
-          }
+          h[decodeURIComponent(kv[0])] = decodeURIComponent(kv[1] || "");
         });
         return h;
       }
 
-      // A link without sweep keys — every link shared before this feature existed — falls
-      // back to the default sweep rather than to a blank chart. A link that names a sweep
-      // parameter or range but predates the toggle asked for a chart, so it gets one; only
-      // an explicit swon=0 or no sweep keys at all leaves it collapsed.
+      // A link without a sec key is every link shared before section types existed, and those
+      // were all trapezoidal — so absent means trapezoid and they all still open.
+      //
+      // A link without sweep keys likewise falls back to the default sweep rather than to a
+      // blank chart. A link that names a sweep parameter or range but predates the toggle
+      // asked for a chart, so it gets one; only an explicit swon=0 or no sweep keys at all
+      // leaves it collapsed.
       function init() {
         var h = readHash();
-        var v = readInputs();
+        if (h.mode) modeRadios.forEach(function (r) { r.checked = (r.value === h.mode); });
+
+        setSection(SECTIONS[h.sec] || SECTIONS.trapezoid);
+        KEYS.forEach(function (k) {
+          if (isFinite(parseFloat(h[k]))) inputs[k].value = h[k];
+        });
+
         var allowed = sweepable(sec, currentMode());
         var p = h.sweep && allowed.indexOf(h.sweep) >= 0 ? h.sweep : allowed[0];
         var haveRange = isFinite(parseFloat(h.smin)) && isFinite(parseFloat(h.smax));
         sweepOn.checked = h.swon !== undefined
           ? h.swon === "1"
           : Boolean(h.sweep || haveRange);
-        setSweepParam(p, v, !haveRange);
+        setSweepParam(p, readInputs(), !haveRange);
         if (haveRange) { sminEl.value = h.smin; smaxEl.value = h.smax; }
         compute();
       }
 
-      KEYS.forEach(function (k) { inputs[k].addEventListener("input", compute); });
+      Object.keys(SECTIONS).forEach(function (id) {
+        var opt = document.createElement("option");
+        opt.value = id;
+        opt.textContent = SECTIONS[id].view.name;
+        secSelect.appendChild(opt);
+      });
+
+      secSelect.addEventListener("change", function () {
+        // Carry the current values across; buildFields keeps those whose parameter survives.
+        var keep = {};
+        KEYS.forEach(function (k) { keep[k] = inputs[k].value; });
+        setSection(SECTIONS[secSelect.value], keep);
+        compute();
+      });
+
       [sminEl, smaxEl].forEach(function (e) { e.addEventListener("input", compute); });
       modeRadios.forEach(function (r) { r.addEventListener("change", compute); });
       sweepOn.addEventListener("change", compute);
-      sweepRadios.forEach(function (r) {
-        r.addEventListener("change", function () {
-          setSweepParam(r.value, readInputs(), true);
-          compute();
-        });
-      });
       window.addEventListener("hashchange", init);
 
       // Redraw on any panel resize so both figures keep filling their share of the column.
