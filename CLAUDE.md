@@ -42,10 +42,28 @@ A section type's `math` half owns `params`, `depthLimit`, `containing`, `props`,
 and `outline`. Everything else is generic and must stay that way:
 
 - **Every input is declared exactly once**, as a parameter object carrying `key`, `sym`,
-  `desc`, `name`, `domain`, `sweep`, `def` and `seed`. That declaration is the only statement
-  of what a section takes — the fields grid, the sweep axis label, the validation, the seeded
-  range, the URL keys and the aria labels are all generated from it. Do not add a hardcoded
-  list of parameter names anywhere; several used to exist and each was a thing to keep in step.
+  `desc`, `name`, `domain`, `sweep`, `def`, `step` and `seed`. That declaration is the only
+  statement of what a section takes — the fields grid, the sweep axis label, the validation,
+  the seeded range, the spinner increment, the URL keys and the aria labels are all generated
+  from it. Do not add a hardcoded list of parameter names anywhere; several used to exist and
+  each was a thing to keep in step.
+- **`step` governs the arrow keys and nothing else.** `Q` steps by 1, `b` and `z` by 0.5, `H`
+  and `y` by 0.1, `D` by 0.05 and `n` by 0.001, `S₀` by 0.01. A typed value off the step grid
+  is still read and solved exactly as given, because `readInputs` parses `input.value` rather
+  than asking the input whether it is valid — and nothing styles `:invalid`. Keep it that way:
+  a step that could reject a hand-entered `n` would be a wrong answer, not a nicety.
+- **The arrows cannot step a field to a value validation would then reject.** `stepFloor`
+  reads the floor off the same `domain` that does the rejecting — `0` for `nonNegative`, one
+  whole step for the two positive domains — so it cannot drift from the validation the way a
+  hand-written `min` per parameter would. `stepCeiling` is the top end and the only cross-field
+  one: a closed section's `y` in flow mode stops one step below the crown, because `y >= D`
+  is an error (`docs/adr/0004`) and a `max` set at the crown would still let the spinner land
+  exactly on it. It depends on `D`, so `compute()` re-sets it on every keystroke — safe
+  because setting an attribute neither blurs nor moves the field, unlike `placeRangeRow`.
+  A trapezoid's `y` gets **no** ceiling: overtopping is a warning about a flow that really
+  happens, so the arrows may walk past the bank. Two states remain reachable and should stay
+  reachable, since neither is something an arrow did: `b` and `z` both arrowed to zero is the
+  documented degenerate cross-section, and shrinking `D` below a standing `y` surcharges.
 - **Three parameter domains**: `positive` (`n`, `S₀`, `D`, `H`), `nonNegative` (`b`, `z`) and
   `positiveAsPoint` (`Q`, `y`). The third is what keeps `validate` and `validateRange`
   near-siblings by declaration rather than by two hand-synced lists.

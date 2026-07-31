@@ -675,13 +675,13 @@
 
       var P_Q = {
         key: "Q", sym: "Q", desc: "discharge, m³/s", name: "Discharge",
-        domain: "positiveAsPoint", sweep: true, def: "5",
+        domain: "positiveAsPoint", sweep: true, def: "5", step: "1",
         seed: function (v) { return [0, v.Q > 0 && isFinite(v.Q) ? 2 * v.Q : 10]; }
       };
 
       var P_y = {
         key: "y", sym: "y", desc: "flow depth, m", name: "Flow depth",
-        domain: "positiveAsPoint", sweep: true, def: "0.8",
+        domain: "positiveAsPoint", sweep: true, def: "0.8", step: "0.1",
         // Seeded from the containing dimension rather than from H, so a closed section seeds
         // from its crown without this needing to know which is which.
         seed: function (v, sec) {
@@ -695,13 +695,13 @@
         // The generated "sweep manning's n" reads as a lowercased surname, so this one is
         // spelled out. Every other parameter's name lowercases correctly.
         aria: "Sweep Manning's n",
-        domain: "positive", sweep: true, def: "0.03",
+        domain: "positive", sweep: true, def: "0.03", step: "0.001",
         seed: function () { return [0.01, 0.1]; }
       };
 
       var P_S = {
         key: "S", sym: "S₀", desc: "bed slope, m/m", name: "Bed slope",
-        domain: "positive", sweep: true, def: "0.01",
+        domain: "positive", sweep: true, def: "0.01", step: "0.01",
         // The generated sentence is right for n and too thin for S₀, where the reason is the
         // equation itself rather than a convention.
         msg: {
@@ -762,19 +762,19 @@
             params: [
               {
                 key: "b", sym: "b", desc: "bottom width, m", name: "Bottom width",
-                domain: "nonNegative", sweep: true, def: "2",
+                domain: "nonNegative", sweep: true, def: "2", step: "0.5",
                 seed: function (v) { return [0, v.b > 0 && isFinite(v.b) ? Math.max(5, 2 * v.b) : 5]; }
               },
               {
                 key: "z", sym: "z", desc: "side slope, H:V", name: "Side slope",
-                domain: "nonNegative", sweep: true, def: "2",
+                domain: "nonNegative", sweep: true, def: "2", step: "0.5",
                 seed: function () { return [0, 4]; }
               },
               {
                 // Not sweepable: H appears in neither Q(y) nor normalDepth(Q), so sweeping it
                 // would draw a flat line.
                 key: "H", sym: "H", desc: "channel height, m", name: "Channel height",
-                domain: "positive", sweep: false, def: "1.5"
+                domain: "positive", sweep: false, def: "1.5", step: "0.1"
               }
             ],
 
@@ -847,7 +847,7 @@
             params: [
               {
                 key: "D", sym: "D", desc: "diameter, m", name: "Diameter",
-                domain: "positive", sweep: true, def: "1",
+                domain: "positive", sweep: true, def: "1", step: "0.05",
                 // Down to a size worth calling a pipe, up to twice the current one. Not from
                 // zero: a zero diameter is not a section, and the domain rejects it anyway.
                 seed: function (v) { return [0.15, v.D > 0 && isFinite(v.D) ? 2 * v.D : 2]; }
@@ -941,6 +941,35 @@
         }
         if (x <= 0) return (p.msg && p.msg.point) || p.name + " must be greater than zero.";
         return null;
+      }
+
+      // The floor the spinner arrows may not step below, read off the same domain that
+      // rejects the value — so the arrows cannot walk a field into a state validate() then
+      // complains about. `nonNegative` admits zero, so zero is the floor. The other two
+      // exclude it, and the smallest sensible value on a grid of `step` is one step, so that
+      // is the floor. Nothing here constrains *typing*: the domain messages are still how a
+      // hand-entered zero gets explained, and that path is deliberately untouched.
+      function stepFloor(p) {
+        if (p.domain === "nonNegative") return "0";
+        return p.step || null;
+      }
+
+      // The mirror of stepFloor at the top end, and the only cross-field one: a closed
+      // section rejects a depth at or above its crown outright (docs/adr/0004), so the arrows
+      // stop one whole step short of it. Depends on D, so unlike the floor it cannot be set
+      // once when the field is built. Only y, and only in flow mode — an open channel's
+      // overtopping is a warning about a flow that really happens, not a rejection, so its
+      // depth field carries no ceiling and the arrows may walk past the bank.
+      //
+      // One step short, not the crown itself: a `max` equal to the limit would still let the
+      // spinner land exactly on it, and y == D is the rejected case.
+      function stepCeiling(sec, p, v, mode) {
+        if (p.key !== "y" || mode !== "flow") return null;
+        var limit = sec.math.depthLimit(v);
+        var st = parseFloat(p.step);
+        if (!isFinite(limit) || limit <= 0 || !isFinite(st) || st <= 0) return null;
+        var k = Math.ceil(limit / st) - 1;
+        return k > 0 ? String(+(k * st).toFixed(10)) : null;
       }
 
       // Returns an array of human-readable problems, empty if the inputs are usable.
@@ -1339,7 +1368,12 @@
           var input = document.createElement("input");
           input.type = "number";
           input.id = "in-" + p.key;
-          input.step = "any";
+          // The spinner increment, declared with the parameter like everything else about it.
+          // It only governs the arrows: readInputs parses input.value, so a typed value off
+          // the step grid is still read and solved exactly as given.
+          input.step = p.step || "any";
+          var floor = stepFloor(p);
+          if (floor !== null) input.min = floor;
           input.inputMode = "decimal";
           // Whatever the user had for a parameter that survives the change of section type.
           // Q, y, n and S₀ mean the same thing in every section; the geometry does not.
@@ -1515,6 +1549,12 @@
         $("row-y").classList.toggle("hidden", mode !== "flow");
 
         var v = readInputs();
+
+        // Setting an attribute neither blurs the field nor moves it, so this is safe on every
+        // keystroke in a way that re-inserting an element is not — see placeRangeRow.
+        var yCeil = stepCeiling(sec, P_y, v, mode);
+        if (yCeil === null) inputs.y.removeAttribute("max");
+        else inputs.y.max = yCeil;
 
         // The swept parameter must be legal for the mode: switching modes swaps which of
         // Q and y is an input, and the hidden one cannot be swept.
