@@ -432,6 +432,11 @@ narrower than it looks as a result: an arbitrary section may well be *shaped* co
 bar or an island splitting the flow, and `docs/adr/0006` says what happens then. What stays out
 is the subdivision **method**, not the geometry.
 
+Also out: **export in any form** — no CSV of the sweep samples, no SVG or PNG download, no print
+layout. The tool is for quick iteration, not for design work that will not be verified
+elsewhere, and an export path invites the number to be treated as a deliverable. A screenshot
+remains the complete figure, which is also why the sweep is static (see Open items).
+
 Also out: **inverse solve** ("what `b` gives `y` = 1.2?") and **optimization** ("what section
 minimises excavation?"). The sweep is the substrate for both and forecloses neither, but it
 deliberately reports a response rather than a recommendation — including *not* reporting the
