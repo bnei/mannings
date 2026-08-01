@@ -85,11 +85,13 @@ and `outline`. Everything else is generic and must stay that way:
   precisely the case the single-file shape exists to serve.
 
 **Terminology lives in [CONTEXT.md](./CONTEXT.md)** — a glossary, no implementation detail.
-Architectural decisions live in [docs/adr/](./docs/adr/). Four exist: the sweep is
+Architectural decisions live in [docs/adr/](./docs/adr/). Six exist: the sweep is
 deliberately not an optimizer (0001), the sweep's response is the solve mode rather than a
-separate control (0002), normal depth enumerates roots and reports the shallowest (0003), and
-a closed section at its crown is an error rather than a warning (0004). Read 0001 and 0002
-before adding to the sweep, 0003 and 0004 before touching the solver or adding a section type.
+separate control (0002), normal depth enumerates roots and reports the shallowest (0003), a
+closed section at its crown is an error rather than a warning (0004), a parameter declares its
+kind so the generic layers never branch on section type (0005), and section properties sum over
+disjoint wetted regions (0006). Read 0001 and 0002 before adding to the sweep, 0003 and 0004
+before touching the solver, and 0005 and 0006 before adding a section type.
 
 ## Hard constraints
 
@@ -405,10 +407,13 @@ choice while `currentMode()` silently carried on in depth mode.
   The plan is kept for its decisions ledger and its rejected alternatives, not as a work list.
 - **Arbitrary (station/elevation) sections are designed for but not built.** The seam is cut
   and this is the shape it expects: a `params` list holding the point pairs, `outline`
-  returning them directly, `props` integrating them analytically, and `depthLimit` at the top
+  returning the boundary, `props` integrating it analytically, and `depthLimit` at the top
   of the data. The one thing that will *not* work as-is is the grid — see the `GRID` note
   above, every breakpoint elevation has to be forced into it. The fragment encoding was agreed
-  as plain pairs, `pts=0,3;0.5,0;2,0;2.5,3`.
+  as plain pairs, `pts=0,3;0.5,0;2,0;2.5,3`. Two assumptions in the current code have to be
+  broken first and each has an ADR: every parameter is a scalar float (`docs/adr/0005`), and
+  the wetted region is a single connected one (`docs/adr/0006`, which also changes `outline`'s
+  return shape for the two section types that already ship). Read both before starting.
 - The `briannei-site` landing page does not yet have a card for this tool.
 - The sweep is static by design: no hover readout, no click-to-set-the-operating-point. Both
   were considered and deferred so that a screenshot is the complete figure and there is no
@@ -416,9 +421,16 @@ choice while `currentMode()` silently carried on in depth mode.
 
 ## Deliberately out of scope
 
-Arbitrary, compound and natural sections; rectangular as its own section type (it is `z = 0`);
-pressurized flow (`docs/adr/0004`); critical depth; US customary units; CSV input; composite
-roughness; an `n` lookup table.
+Compound sections **as a method** — conveyance subdivision with a per-subsection `n` — and
+natural sections; rectangular as its own section type (it is `z = 0`); pressurized flow
+(`docs/adr/0004`); critical depth; US customary units; CSV input; composite roughness; an `n`
+lookup table.
+
+Arbitrary (station/elevation) sections used to head this list and no longer do — they are an
+open item with two ADRs behind them (`docs/adr/0005`–`0006`). The compound entry above is
+narrower than it looks as a result: an arbitrary section may well be *shaped* compound, with a
+bar or an island splitting the flow, and `docs/adr/0006` says what happens then. What stays out
+is the subdivision **method**, not the geometry.
 
 Also out: **inverse solve** ("what `b` gives `y` = 1.2?") and **optimization** ("what section
 minimises excavation?"). The sweep is the substrate for both and forecloses neither, but it
