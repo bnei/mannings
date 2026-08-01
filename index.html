@@ -3,8 +3,11 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Manning's equation — trapezoidal channel</title>
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <!-- Section-neutral: applyIdentity() specialises the title per section type at runtime,
+         but this is what a crawler, a link preview and the tab before first paint see.
+         Relative href, not root-absolute — from file:// a leading slash is the filesystem root. -->
+    <title>Manning's equation — channel sections</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
     <meta name="description" content="Solve Manning's equation for a trapezoidal or circular channel section: normal depth from discharge, or discharge from depth. SI units. Runs entirely in your browser.">
     <style>
       :root {
@@ -533,9 +536,12 @@
     <section class="panel results">
       <h2>Results</h2>
 
-      <div id="error" class="note err hidden"></div>
+      <!-- Live regions: every result and error is rewritten in place on each keystroke, which
+           a screen reader would otherwise never re-read. Assertive on the error because it
+           also hides the results block; polite on the results so typing isn't interrupted. -->
+      <div id="error" class="note err hidden" role="alert" aria-live="assertive"></div>
 
-      <div id="results-body" class="results-body">
+      <div id="results-body" class="results-body" aria-live="polite">
         <div class="primary">
           <span class="label" id="primary-label">Normal depth</span>
           <span class="value"><span id="primary-value">—</span><span class="unit" id="primary-unit"> m</span></span>
@@ -717,6 +723,22 @@
         var a = Math.abs(v);
         if (a >= 1e6 || a < 1e-4) return v.toExponential(3);
         return String(Number(v.toPrecision(4)));
+      }
+
+      // The same 4 significant figures, but truncated toward zero instead of rounded to
+      // nearest — for a number reported as a *bound* rather than as a result. Rounding a
+      // capacity ceiling to nearest can round it up, so "conveys at most 1.118 m³/s" would
+      // reject a Q of 1.1177 while naming a larger figure the section cannot actually carry.
+      // Truncating always states a discharge the section really achieves. Use fmt() for
+      // measured results; use this only where the number is a limit.
+      function fmtFloor(v) {
+        if (v === null || v === undefined || !isFinite(v)) return "—";
+        if (v === 0) return "0";
+        var a = Math.abs(v);
+        var s = Math.pow(10, Math.floor(Math.log10(a)) - 3);
+        var t = (v > 0 ? Math.floor : Math.ceil)(v / s) * s;
+        if (a >= 1e6 || a < 1e-4) return t.toExponential(3);
+        return String(Number(t.toPrecision(4)));
       }
 
       // ---- Parameters ----
@@ -994,7 +1016,7 @@
               var peak = maxDischarge(sec, v);
               if (peak && peak.Q > discharge(sec, v, v.D)) {
                 notes.push("<strong>Peak conveyance is below the crown.</strong> This " +
-                           "section carries up to " + fmt(peak.Q) + " m³/s at " +
+                           "section carries up to " + fmtFloor(peak.Q) + " m³/s at " +
                            fmt(peak.y) + " m, more than its capacity flowing full, because " +
                            "the wetted perimeter grows faster than the area near the crown. " +
                            "Capacity is still reported at the crown: the peak is not a depth " +
@@ -1729,7 +1751,7 @@
             // than telling the user to go and check their geometry.
             var peak = maxDischarge(sec, v);
             showError([peak
-              ? "No normal depth exists: this section conveys at most " + fmt(peak.Q) +
+              ? "No normal depth exists: this section conveys at most " + fmtFloor(peak.Q) +
                 " m³/s, at a depth of " + fmt(peak.y) + " m. Above that the flow surcharges."
               : "No normal depth exists for that discharge in this channel — check the slope, roughness and geometry."]);
             return;
@@ -1849,9 +1871,19 @@
       // leaves it collapsed.
       function init() {
         var h = readHash();
-        if (h.mode) modeRadios.forEach(function (r) { r.checked = (r.value === h.mode); });
+        // Only an h.mode that names a real radio may be applied: any other truthy value would
+        // uncheck both and leave the group rendering as an unanswered choice, even though
+        // currentMode() would quietly carry on in depth mode.
+        if (h.mode && modeRadios.some(function (r) { return r.value === h.mode; })) {
+          modeRadios.forEach(function (r) { r.checked = (r.value === h.mode); });
+        }
 
-        setSection(SECTIONS[h.sec] || SECTIONS.trapezoid);
+        // hasOwnProperty, not a bare read: SECTIONS is an object literal, so `#sec=constructor`
+        // or `#sec=toString` would otherwise resolve to a truthy Object.prototype member, skip
+        // the fallback and hand setSection something with no .view.
+        var picked = h.sec && Object.prototype.hasOwnProperty.call(SECTIONS, h.sec)
+          ? SECTIONS[h.sec] : null;
+        setSection(picked || SECTIONS.trapezoid);
         KEYS.forEach(function (k) {
           if (isFinite(parseFloat(h[k]))) inputs[k].value = h[k];
         });

@@ -14,7 +14,9 @@ and `what-utm`.
 - Deployed on Cloudflare Pages with no build command. Every request is a static asset, so
   nothing touches the metered Workers/Functions quota.
 - Runs from `file://` and offline, which matters for a calculation that may need to be
-  reproducible years later.
+  reproducible years later. Every path in the file is relative for that reason — a root-absolute
+  `/favicon.svg` resolves to the filesystem root from `file://` and 404s in exactly the offline
+  case the shape exists to serve.
 - Auditable in one screen, which matters for a number that ends up in a report.
 
 Do not introduce a build step, a framework, or a CDN dependency without a concrete reason
@@ -64,6 +66,13 @@ and `outline`. Everything else is generic and must stay that way:
   happens, so the arrows may walk past the bank. Two states remain reachable and should stay
   reachable, since neither is something an arrow did: `b` and `z` both arrowed to zero is the
   documented degenerate cross-section, and shrinking `D` below a standing `y` surcharges.
+  The claim holds **while the crown clears one step of `y` (0.1 m)** — i.e. `D > 0.1`. Below
+  that, `stepCeiling` returns `null` and the `max` comes off, so the arrows can reach `y = 0.1
+  >= D`. It is not fixable at the ceiling alone: `stepFloor` already pins `min = 0.1` from the
+  `positiveAsPoint` domain, and HTML clamps a `max` below `min` up to `min`, so on a sub-100 mm
+  pipe *no* arrow-reachable `y` is valid. Typing still works and still validates correctly.
+  Fixing it properly means a finer `step` for `y` or a geometry-aware floor; neither is worth
+  the churn for sub-100 mm circular sections, so the boundary is documented instead.
 - **Three parameter domains**: `positive` (`n`, `S₀`, `D`, `H`), `nonNegative` (`b`, `z`) and
   `positiveAsPoint` (`Q`, `y`). The third is what keeps `validate` and `validateRange`
   near-siblings by declaration rather than by two hand-synced lists.
@@ -92,14 +101,15 @@ of view. Below `68rem` the layout stacks and page scrolling is allowed — the g
 desktop promise, not a reason to break phones.
 
 Verified at 1920×1080 on **both** section types: `scrollWidth`/`scrollHeight` both exactly
-1920/1080, no panel clipped, `.figwrap` 1184×403 each with the sweep shown and 1184×831 with
-it hidden. Also checked at 1088px (the breakpoint) and 390px — no horizontal scroll at either,
+1920/1080, no panel clipped, `.figwrap` 1184×404 each with the sweep shown and 1184×891 with
+it hidden — hiding the sweep also hides the "Sensitivity sweep" subhead, so the cross-section
+reclaims that row (~60px) on top of the chart's half. Also checked at 1088px (the breakpoint) and 390px — no horizontal scroll at either,
 in either sweep state, in either section type. Trapezoidal is the worst case for the controls
 column: circular replaces `b`, `z` and `H` with `D` alone, freeing a row.
 
 The `<select>` in the `h1` costs the titlebar about 4px over the plain heading it replaced,
-which is why the figures are 403/831 rather than the 404/835 recorded before it existed. The
-figure column absorbed it, which is the structural guarantee doing its job.
+and the figure column absorbed it — a few px off each figure rather than a taller page, which
+is the structural guarantee doing its job.
 
 Consequences to respect:
 - Every grid item needs explicit `grid-area`. Relying on source order already caused one
@@ -139,7 +149,13 @@ Consequences to respect:
   `[type="number"]`, or the radio inherits the text box's padding, border and background.
 - The section-type `<select>` lives in the `h1`. `appearance: none` removes the platform
   caret, so `.secpick::after` supplies one — without a caret, a select styled to match the
-  heading around it reads as plain text and nobody finds it.
+  heading around it reads as plain text and nobody finds it. The static `<title>` stays
+  section-neutral because it is what a crawler, a link preview and the tab before first paint
+  see; `applyIdentity()` specialises it per section at runtime.
+- **The results and error blocks are live regions** — `aria-live="polite"` on `#results-body`,
+  `role="alert"`/`aria-live="assertive"` on `#error`. Every output is rewritten in place on each
+  keystroke, and an error additionally *hides* the results block, so without these a screen
+  reader gets nothing where a sighted user sees the answer change.
 - **The fields grid is generated, and the field elements are replaced on a section change.**
   Nothing may cache an input element, the sweep radios or `KEYS` across one; `setSection` is
   the only place that rebuilds them and it rebuilds all four together. Values are carried over
@@ -234,7 +250,12 @@ held at, and a culvert sized to it is a culvert sized to surcharge.
 - Froude in `0.95 < Fr < 1.05` is reported as **near critical**, not pinned to `Fr = 1.000`.
   Uniform-flow assumptions are unreliable there and exact criticality would be false
   precision.
-- Results are 4 significant figures via `fmt()`.
+- Results are 4 significant figures via `fmt()`. A number reported as a **bound** rather than as
+  a result — the maximum discharge, in both the no-normal-depth error and the peak-conveyance
+  caveat — goes through `fmtFloor()`, which truncates toward zero at the same precision.
+  Rounding to nearest can round a ceiling *up*, so `Qmax = 1.1176` would print as `1.118` and
+  the tool would reject `Q = 1.1177` while naming a larger flow the section cannot carry.
+  Overstating capacity is the wrong direction for a number that may size a culvert.
 - **`validateRange` is a near-sibling of `validate`, not a clone.** As a *range endpoint*,
   `Q = 0` and `y = 0` are well defined — both give exactly zero, and `y = 0` is the natural
   left edge of a rating curve — whereas as *point inputs* they are rejected, because a channel
@@ -372,7 +393,11 @@ whether the chart is shown, and a link predating the toggle that names a sweep p
 range asked for a chart, so it gets one. No `sec` key means trapezoidal, so every link shared
 before section types existed still opens; unknown keys are ignored rather than treated as
 errors, so a link naming a section type this build doesn't have still opens on what it does
-understand.
+understand. That includes names inherited from `Object.prototype` — `#sec=constructor` and
+`#sec=toString` must fall back like `#sec=egg` does, which is why the lookup goes through
+`hasOwnProperty` rather than a bare `SECTIONS[h.sec] ||` read. `mode` is applied only if it
+names a real radio: any other value would uncheck both and render the group as an unanswered
+choice while `currentMode()` silently carried on in depth mode.
 
 ## Open items
 
