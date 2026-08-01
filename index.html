@@ -883,6 +883,12 @@
             // Freeboard is clearance against a bank water can pass over, so its two states
             // are both about the bank. A closed section names the same row differently.
             clearanceLabel: function (free) { return free < 0 ? "Depth above bank" : "Freeboard"; },
+            // What the shaded region past the threshold line means, in this section's own
+            // terms: for an open section the threshold is the bank, so exceeding it really is
+            // overtopping. A closed section's threshold is capacity flowing full, which a
+            // valid, still-open-surface depth can exceed — see the circle's own label.
+            exceedLabel: "Shaded region overtops the bank",
+            noExceedLabel: "No overtopping across this range",
             hint: "<em>z</em> is horizontal run per unit rise — <em>z</em> = 2 means 2 m out " +
                   "for every 1 m up. Use 0 for vertical walls, or <em>b</em> = 0 for a " +
                   "triangular section. <em>H</em> is the channel itself, invert to top of bank.",
@@ -964,6 +970,12 @@
             // this row has one name rather than two. Not freeboard — freeboard is clearance
             // against a bank that water can pass over.
             clearanceLabel: function () { return "Depth to crown"; },
+            // Not "overtops the bank": the threshold here is capacity flowing full, and a
+            // depth still below the crown (still a valid, non-surcharged state) can convey
+            // more than that — see the peak-conveyance note. "Overtops" would wrongly imply
+            // the surface itself is above the pipe.
+            exceedLabel: "Shaded region exceeds capacity at crown",
+            noExceedLabel: "No exceedance across this range",
             hint: "<em>D</em> is the internal diameter, and also the invert-to-crown " +
                   "distance — a circular section has no separate channel height. Flow " +
                   "reaching the crown is pressurized and outside what this tool solves.",
@@ -1555,7 +1567,7 @@
           return p.response !== null && p.threshold !== null && p.response > p.threshold;
         });
         return [
-          over ? "Shaded region overtops the bank" : "No overtopping across this range",
+          over ? sec.view.exceedLabel : sec.view.noExceedLabel,
           res.operating.inRange && res.operating.response !== null
             ? "dot marks the current inputs"
             : "current inputs lie outside this range"
