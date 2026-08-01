@@ -157,6 +157,33 @@ with an annotation, cross-sections do not. A wide shallow channel legitimately l
 whitespace in a tall panel — that is geometry, not a bug to fix. Halving the panel to make
 room for the sweep chart made that whitespace more prominent, not less legitimate.
 
+**The cross-section is dimensioned, not labelled.** `T`, `y` and the freeboard are drawn as
+drafted dimensions — extension lines off the geometry, a dimension line between them, arrowheads
+at its ends — rather than as text floating near the feature, because a number beside a shape
+doesn't say what it measures and a dimension does. The helpers are `dimArrow`, `dimLine`,
+`dimText`, `dimH` and `dimV`; the whole dimension takes one semantic color, so a flagged value
+(overtopping) reads as a unit rather than as red digits. Text stays upright on a vertical
+dimension — unidirectional dimensioning, the convention civil cross-sections use.
+
+Three details are load-bearing and each replaced something that looked wrong:
+
+- **Extension lines are faint (`DIM_FAINT`), the dimension line and arrows are not.** On a
+  sloped bank the depth's two feature points are far apart in `x`, so one witness line is
+  inevitably long; at full weight it reads as part of the channel. The fix is hierarchy, not
+  moving the dimension somewhere it fits better.
+- **The text breaks its line with a background-colored stroke under the glyphs**
+  (`paint-order="stroke"`), not with an opaque rect. The rect had to be sized from a
+  character-width guess, which is why the dimension font was once monospace; the halo needs no
+  measurement, so the figure is back to one font. It assumes flat background behind the text —
+  true for every current dimension, and the thing to check before placing one over the water.
+- **A span under `DIM_TIGHT` puts its arrows outside pointing in**, with tails past them and the
+  text moved clear. Reachable and common: a freeboard of 20 mm otherwise draws two arrowheads
+  crossing under a label wider than the thing it measures.
+
+`padX` in `drawSection` has a floor of 64 because the widest label (`y = 0.7183 m`) is centered
+on a dimension line 18px outside the shape's bounding box. That floor is set by the label, not
+by taste — lower it and the depth clips off a phone-width panel.
+
 **Linear sweep axes only.** A log x-axis would read better for `S₀`, which spans 20× across
 its seeded range, but a log axis cannot represent zero and `b = 0` (triangular) and `z = 0`
 (rectangular) must stay sweepable. The seeded `S₀` range is kept narrow instead. Don't
@@ -332,6 +359,13 @@ telling the user to check their geometry; `y > 0.9·D` raises the nearly-closed 
 capacity caveat naming the peak is always present; a sweep of `y` past the crown leaves gaps
 rather than a flat line; the results panel has the same nine rows as it does for a trapezoid,
 with `Capacity at crown` and `Depth to crown` in place of `Capacity at H` and `Freeboard`.
+
+For the dimensions, assert on `getBBox` rather than on a screenshot: no label may fall outside
+the viewBox and no two may overlap, checked on both section types at 1920, 1088 and 390 px and
+in both sweep states. The four geometries that exercise the awkward paths are a near-zero
+freeboard (`y = 1.48` of `H = 1.5`), a near-zero depth (`y = 0.03`), a circular section just
+under its crown (`y = 0.985·D`), and overtopping, where the depth dimension turns red and the
+freeboard is not drawn at all. The narrow-panel case is the one that catches a `padX` change.
 
 Link handling: no `sweep`/`smin`/`smax` keys falls back to the default sweep; `swon` decides
 whether the chart is shown, and a link predating the toggle that names a sweep parameter or

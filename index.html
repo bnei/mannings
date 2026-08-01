@@ -1146,6 +1146,90 @@
         return { param: param, lo: lo, hi: hi, mode: mode, samples: samples, operating: op };
       }
 
+      // ---- Dimension-line drawing (engineering-drawing convention) ----
+      //
+      // Extension lines leave a small gap off the geometry and overshoot the dimension line
+      // slightly; arrowheads sit tip-first at the dimension line's own ends, pointing outward
+      // the way a drafted dimension's arrows touch their extension lines. Dimension text stays
+      // upright even on a vertical dimension (unidirectional dimensioning — the convention
+      // civil cross-sections use) rather than rotating to follow the line, and the whole
+      // dimension carries one semantic color so a flagged value (overtopping, surcharge)
+      // reads as a unit rather than just its digits.
+      //
+      // Two things keep a drafted dimension from overwhelming the shape it measures, and both
+      // are hierarchy rather than convention. Extension lines are drawn faint: on a sloped
+      // bank the two feature points are far apart in x, so one witness line is inevitably long,
+      // and at full weight that long line reads as part of the drawing. Only the dimension line
+      // proper, its arrows and its text carry full weight. Second, the text breaks the line it
+      // sits on with a background-colored stroke under the glyphs (paint-order puts that stroke
+      // beneath the fill) rather than with an opaque patch — the same read as routing the line
+      // around the text, without having to measure the text to size a rectangle, and without a
+      // patch edge to show against anything but flat background.
+      var DIM_GAP = 4, DIM_OVER = 5, DIM_ARROW = 9, DIM_ARROW_W = 2.6, DIM_NOTCH = 0.68;
+      var DIM_FAINT = 0.45;
+      var FIG_FONT = 'font-size="12.5" font-family="ui-sans-serif, system-ui, sans-serif"';
+      var dimFont = FIG_FONT + ' font-variant-numeric="tabular-nums"';
+
+      // Notched at the tail rather than a plain isosceles triangle: at this size a solid wedge
+      // reads as a blob, and the notch is what makes it read as an arrowhead.
+      function dimArrow(x, y, dir, color) {
+        var L = DIM_ARROW, w = DIM_ARROW_W, k = L * DIM_NOTCH, p;
+        if (dir === "left")  p = [[x, y], [x + L, y - w], [x + k, y], [x + L, y + w]];
+        if (dir === "right") p = [[x, y], [x - L, y - w], [x - k, y], [x - L, y + w]];
+        if (dir === "up")    p = [[x, y], [x - w, y + L], [x, y + k], [x + w, y + L]];
+        if (dir === "down")  p = [[x, y], [x - w, y - L], [x, y - k], [x + w, y - L]];
+        return '<polygon points="' + p.map(function (pt) {
+          return pt[0].toFixed(1) + "," + pt[1].toFixed(1);
+        }).join(" ") + '" fill="' + color + '"/>';
+      }
+
+      function dimLine(x1, y1, x2, y2, color, faint) {
+        return '<line x1="' + x1.toFixed(1) + '" y1="' + y1.toFixed(1) + '" x2="' +
+               x2.toFixed(1) + '" y2="' + y2.toFixed(1) + '" stroke="' + color +
+               '" stroke-width="1"' + (faint ? ' stroke-opacity="' + DIM_FAINT + '"' : '') +
+               ' stroke-linecap="round"/>';
+      }
+
+      function dimText(cx, cy, text, color) {
+        return '<text x="' + cx.toFixed(1) + '" y="' + (cy + 0.5).toFixed(1) + '" ' + dimFont +
+               ' fill="' + color + '" stroke="var(--bg)" stroke-width="5" paint-order="stroke"' +
+               ' stroke-linejoin="round" text-anchor="middle" dominant-baseline="middle">' +
+               text + '</text>';
+      }
+
+      // A span too short to hold two arrowheads gets them outside the extension lines pointing
+      // in, with the line growing tails past them — the drafting answer to a tight dimension,
+      // and the reason a freeboard of 20 mm doesn't render as two arrowheads crossing. The
+      // text moves clear of the line in that case for the same reason: at that size its
+      // background halo would erase the dimension it is labelling.
+      var DIM_TIGHT = DIM_ARROW * 3.2, DIM_TAIL = DIM_ARROW * 1.8;
+
+      // Horizontal dimension between two feature points — level in every current use, but
+      // taken separately since a sloped feature is one call away.
+      function dimH(x1, yFeat1, x2, yFeat2, yDim, text, color) {
+        var s1 = yDim >= yFeat1 ? 1 : -1, s2 = yDim >= yFeat2 ? 1 : -1;
+        var tight = Math.abs(x2 - x1) < DIM_TIGHT, tail = tight ? DIM_TAIL : 0;
+        return dimLine(x1, yFeat1 + s1 * DIM_GAP, x1, yDim + s1 * DIM_OVER, color, true) +
+               dimLine(x2, yFeat2 + s2 * DIM_GAP, x2, yDim + s2 * DIM_OVER, color, true) +
+               dimLine(x1 - tail, yDim, x2 + tail, yDim, color) +
+               dimArrow(x1, yDim, tight ? "right" : "left", color) +
+               dimArrow(x2, yDim, tight ? "left" : "right", color) +
+               dimText((x1 + x2) / 2, yDim - (tight ? 11 : 0), text, color);
+      }
+
+      // Vertical dimension from a top feature point to a bottom one, each with its own x —
+      // the bed and the water surface don't sit above one another on a sloped bank.
+      function dimV(xTop, yTop, xBot, yBot, xDim, text, color) {
+        var s1 = xDim >= xTop ? 1 : -1, s2 = xDim >= xBot ? 1 : -1;
+        var tight = Math.abs(yBot - yTop) < DIM_TIGHT, tail = tight ? DIM_TAIL : 0;
+        return dimLine(xTop + s1 * DIM_GAP, yTop, xDim + s1 * DIM_OVER, yTop, color, true) +
+               dimLine(xBot + s2 * DIM_GAP, yBot, xDim + s2 * DIM_OVER, yBot, color, true) +
+               dimLine(xDim, yTop - tail, xDim, yBot + tail, color) +
+               dimArrow(xDim, yTop, tight ? "down" : "up", color) +
+               dimArrow(xDim, yBot, tight ? "up" : "down", color) +
+               dimText(xDim, tight ? yTop - tail - 9 : (yTop + yBot) / 2, text, color);
+      }
+
       // ---- Cross-section drawing ----
 
       // The viewBox is generated from the container's real pixel size rather than being a
@@ -1153,10 +1237,13 @@
       // letterboxed by preserveAspectRatio. One user unit = one CSS pixel, which also keeps
       // stroke widths and label sizes consistent at any panel size.
       function drawSection(sec, v, y, W, Hpx) {
-        // Side padding leaves room for the y and freeboard labels, which sit outside the
-        // channel walls. Scaled down on narrow panels so the shape keeps priority there.
-        var padX = Math.min(84, Math.max(26, W * 0.09));
-        var padTop = 30, padBottom = 40;
+        // Side padding leaves room for the y and freeboard dimension lines, which sit outside
+        // the channel walls. Scaled down on narrow panels so the shape keeps priority there,
+        // but the floor is set by the widest label ("y = 0.7183 m") rather than by taste: the
+        // dimension line sits 18px outside the shape's bounding box and the label is centered
+        // on it, so a floor below about 60 clips the label off a phone-width panel.
+        var padX = Math.min(96, Math.max(64, W * 0.11));
+        var padTop = 40, padBottom = 40;
         if (!(W > padX * 2 + 20) || !(Hpx > padTop + padBottom + 20)) return "";
 
         var H = sec.math.containing(v);
@@ -1209,35 +1296,45 @@
         // Mark the containing dimension only when the water surface is elsewhere, so
         // overtopping reads unambiguously instead of being clipped away — and only when the
         // boundary is open there. A closed section's outline closes at the crown, so the line
-        // would have zero length and the outline already shows it.
+        // would have zero length and the outline already shows it. This is a reference plane,
+        // not a measurement, so it gets witness ticks rather than a full dimension.
         if (Math.abs(y - H) > 1e-9 && Math.abs(bank[bank.length - 1][0] - bank[0][0]) > 1e-9) {
-          o.push('<line x1="' + X(bank[0][0]) + '" y1="' + Y(H) +
-                 '" x2="' + X(bank[bank.length - 1][0]) + '" y2="' + Y(H) +
-                 '" stroke="' + (over ? "var(--err)" : "var(--line)") +
-                 '" stroke-width="1.5" stroke-dasharray="5 4"/>');
+          var bankColor = over ? "var(--err)" : "var(--line)";
+          var bankX1 = parseFloat(X(bank[0][0])), bankX2 = parseFloat(X(bank[bank.length - 1][0]));
+          var bankY = parseFloat(Y(H));
+          o.push('<line x1="' + bankX1.toFixed(1) + '" y1="' + bankY.toFixed(1) +
+                 '" x2="' + bankX2.toFixed(1) + '" y2="' + bankY.toFixed(1) +
+                 '" stroke="' + bankColor + '" stroke-width="1.5" stroke-dasharray="5 4"/>');
+          o.push(dimLine(bankX1, bankY - 5, bankX1, bankY + 5, bankColor));
+          o.push(dimLine(bankX2, bankY - 5, bankX2, bankY + 5, bankColor));
         }
 
-        var lab = 'font-size="12.5" font-family="ui-sans-serif, system-ui, sans-serif"';
-
-        o.push('<text x="' + X(0) + '" y="' + (base + 22) + '" fill="var(--muted)" ' + lab +
+        o.push('<text x="' + X(0) + '" y="' + (base + 22) + '" fill="var(--muted)" ' + FIG_FONT +
                ' text-anchor="middle">' + sec.view.invertLabel(v) + '</text>');
 
         if (y > 0) {
-          o.push('<text x="' + X(wet[wet.length - 1][0]) + '" y="' + (parseFloat(Y(y)) - 9).toFixed(1) +
-                 '" fill="' + (over ? "var(--err)" : "var(--water)") + '" ' + lab +
-                 ' text-anchor="end">T = ' + fmt(sectionProps(sec, v, y).T) + ' m</text>');
-          o.push('<text x="' + (parseFloat(X(wet[0][0])) - 8).toFixed(1) + '" y="' + Y(y / 2) +
-                 '" fill="' + (over ? "var(--err)" : "var(--muted)") + '" ' + lab +
-                 ' text-anchor="end" dominant-baseline="middle">y = ' + fmt(y) + ' m</text>');
+          var tColor = over ? "var(--err)" : "var(--water)";
+          o.push(dimH(parseFloat(X(wet[0][0])), parseFloat(Y(y)),
+                      parseFloat(X(wet[wet.length - 1][0])), parseFloat(Y(y)),
+                      parseFloat(Y(y)) - 22,
+                      "T = " + fmt(sectionProps(sec, v, y).T) + " m", tColor));
+
+          var invert0 = sec.math.outline(v, 0);
+          var yColor = over ? "var(--err)" : "var(--muted)";
+          o.push(dimV(parseFloat(X(wet[0][0])), parseFloat(Y(y)),
+                      parseFloat(X(invert0[0][0])), parseFloat(Y(0)),
+                      parseFloat(X(minX)) - 18,
+                      "y = " + fmt(y) + " m", yColor));
         }
 
         // Anchored on the section's widest point rather than on the end of the outline: for a
         // circle the outline ends at the crown, which is the middle of the figure. The two
         // are the same point for a trapezoid, so this is unchanged there.
         if (!over && H - y > 1e-9) {
-          o.push('<text x="' + (parseFloat(X(maxX)) + 8).toFixed(1) + '" y="' + Y((H + y) / 2) +
-                 '" fill="var(--muted)" ' + lab + ' dominant-baseline="middle">' +
-                 fmt(H - y) + ' m</text>');
+          o.push(dimV(parseFloat(X(bank[bank.length - 1][0])), parseFloat(Y(H)),
+                      parseFloat(X(wet[wet.length - 1][0])), parseFloat(Y(y)),
+                      parseFloat(X(maxX)) + 18,
+                      fmt(H - y) + " m", "var(--muted)"));
         }
 
         return '<svg viewBox="0 0 ' + W.toFixed(0) + ' ' + Hpx.toFixed(0) + '" role="img" ' +
