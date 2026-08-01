@@ -356,6 +356,8 @@
 
       .figure .subhead h2 { margin: 0; }
 
+      .figure .subhead.hidden { display: none; }
+
 
       .figcap {
         flex: 0 0 auto;
@@ -1619,6 +1621,7 @@
       // than a re-seeded one.
       function setSweepEnabled(on) {
         $("sweepfig").classList.toggle("hidden", !on);
+        document.querySelector(".subhead").classList.toggle("hidden", !on);
         rangeRow.classList.toggle("hidden", !on);
         sweepRadios.forEach(function (r) { r.disabled = !on; });
         // Restated here rather than left to setSweepParam, which doesn't run on a plain
